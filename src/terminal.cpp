@@ -53,8 +53,9 @@ std::wstring build_command_line(const String &exe, const PackedStringArray &args
 }
 #endif
 
-// Map a Godot Key keycode to our VTKey enum. Returns VT_KEY_NONE for keys
-// we don't recognise as "special" — those should fall through to unichar.
+// Map a Godot Key keycode to a VTKey value. Returns VT_KEY_NONE for keys
+// not classified as "special"; the caller should fall back to unichar
+// translation in that case.
 int godot_key_to_vt_key(int keycode) {
     using namespace godot;
     if (keycode >= KEY_F1 && keycode <= KEY_F12) {
@@ -337,7 +338,7 @@ void Terminal::_gui_input(const Ref<InputEvent> &p_event) {
 
     Ref<InputEventKey> key = p_event;
     if (key.is_null()) return;
-    if (!key->is_pressed()) return; // ignore key release for now
+    if (!key->is_pressed()) return; // key-release events are not forwarded
     if (!vt_) return;
 
     int mod = VT_MOD_NONE;
@@ -564,11 +565,10 @@ void Terminal::_on_draw() {
         }
     }
 
-    // 4) Optional: indicator that we're scrolled up.
+    // Right-edge stripe: visual hint that the viewport is in scrollback.
     if (K > 0) {
         Color stripe = foreground_color_;
         stripe.a = 0.25f;
-        // Thin vertical bar on the right edge.
         real_t bar_w = std::max<real_t>(2.0f, cell_size_.x * 0.15f);
         draw_rect(Rect2(Vector2(size.x - bar_w, 0), Vector2(bar_w, size.y)), stripe);
     }

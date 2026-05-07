@@ -50,9 +50,9 @@ func _exit_tree() -> void:
 func _spawn_default_shell() -> void:
 	if _terminal == null:
 		return
-	# Run the shell in the open Godot project's root directory, so AI tools
-	# like claude-code see THE project the user has open in the editor — not
-	# the godot_terminal plugin's source tree.
+	# Run the shell in the open Godot project's root so AI coding tools
+	# (claude-code, codex, ...) inspect that project — not the host editor's
+	# parent process directory.
 	var project_cwd: String = ProjectSettings.globalize_path("res://")
 	print("[godot_terminal] spawning cmd.exe with cwd=", project_cwd)
 	var ok: bool = _terminal.start_process("cmd.exe", PackedStringArray(), project_cwd)

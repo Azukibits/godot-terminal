@@ -68,8 +68,9 @@ public:
     void stop_process();
     bool is_process_running() const;
 
-    // Send bytes to the running child's stdin. (Phase 5 will hook this up to
-    // keyboard events automatically.)
+    // Send bytes to the running child's stdin. Keyboard events on the
+    // Terminal control already feed this path automatically; these methods
+    // are exposed for scripted input (e.g. paste, programmatic commands).
     void send_input(const String &p_text);
     void send_input_bytes(const PackedByteArray &p_data);
 

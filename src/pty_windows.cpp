@@ -24,10 +24,10 @@ bool PtyWindows::start(const std::wstring &command_line, int cols, int rows,
                        const std::wstring &cwd) {
     if (running_.load()) return false;
 
-    HANDLE hPipeIn = nullptr;       // child reads from this
-    HANDLE hPipeInWrite = nullptr;  // we write to this
-    HANDLE hPipeOutRead = nullptr;  // we read from this
-    HANDLE hPipeOut = nullptr;      // child writes to this
+    HANDLE hPipeIn = nullptr;       // child reads from this (handed to ConPTY)
+    HANDLE hPipeInWrite = nullptr;  // host writes to this
+    HANDLE hPipeOutRead = nullptr;  // host reads from this
+    HANDLE hPipeOut = nullptr;      // child writes to this (handed to ConPTY)
 
     if (!CreatePipe(&hPipeIn, &hPipeInWrite, nullptr, 0)) {
         return false;
@@ -45,8 +45,8 @@ bool PtyWindows::start(const std::wstring &command_line, int cols, int rows,
     HPCON hPC = nullptr;
     HRESULT hr = CreatePseudoConsole(size, hPipeIn, hPipeOut, 0, &hPC);
 
-    // The pty owns hPipeIn / hPipeOut now — close our duplicates so the
-    // pty is the sole holder.
+    // ConPTY owns hPipeIn / hPipeOut. Close the host-side handles so the
+    // pseudoconsole is the sole holder.
     CloseHandle(hPipeIn);
     CloseHandle(hPipeOut);
 
@@ -128,18 +128,16 @@ bool PtyWindows::start(const std::wstring &command_line, int cols, int rows,
 void PtyWindows::stop() {
     bool was_running = running_.exchange(false);
 
-    // Closing the pseudoconsole closes the pty's pipe handles, which in turn
-    // signals EOF to our reader's blocking ReadFile.
+    // ClosePseudoConsole closes the pty-side pipe handles, which signals
+    // EOF to the reader thread's blocking ReadFile.
     if (h_pc_ != nullptr) {
         ClosePseudoConsole(P(h_pc_));
         h_pc_ = nullptr;
     }
 
-    // Make sure the child is gone before we close handles. ClosePseudoConsole
-    // already triggers a graceful close in most TUI apps, but cmd.exe with a
-    // running child may need a kick.
+    // ClosePseudoConsole triggers a graceful close in most TUI apps; cmd.exe
+    // with a running child sometimes needs an explicit terminate.
     if (h_proc_ != nullptr && was_running) {
-        // Give the child up to 200ms to exit on its own from the pty close.
         DWORD wait = WaitForSingleObject(H(h_proc_), 200);
         if (wait == WAIT_TIMEOUT) {
             TerminateProcess(H(h_proc_), 1);
@@ -177,7 +175,7 @@ void PtyWindows::_reader_loop() {
         std::lock_guard<std::mutex> lk(buf_mu_);
         buf_.insert(buf_.end(), buf, buf + n);
     }
-    // Capture exit code now so `exited_` and `exit_code_` are coherent.
+    // Capture exit code before flagging exited_ so the two stay coherent.
     if (h_proc_ != nullptr) {
         DWORD code = 0;
         if (GetExitCodeProcess(H(h_proc_), &code) &&

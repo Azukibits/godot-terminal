@@ -42,7 +42,7 @@ addon_bin_dir = "demo/addons/godot_terminal/bin"
 if env["platform"] == "windows":
     library_name = "godot_terminal.{}.dll".format(suffix)
 elif env["platform"] in ("macos", "linux"):
-    # Reserved for future cross-platform work. Phase 1 is Windows-only.
+    # Reserved for future cross-platform backends; PTY layer is Windows-only today.
     library_name = "libgodot_terminal.{}.{}".format(
         suffix,
         "dylib" if env["platform"] == "macos" else "so",

@@ -14,8 +14,7 @@
 namespace godot {
 
 // Wraps a ConPTY pseudoconsole + child process + reader thread.
-// All Win32 handles are kept as void* so this header doesn't leak <windows.h>
-// into the rest of the project.
+// Win32 handles are stored as void* so <windows.h> stays out of this header.
 class PtyWindows {
 public:
     PtyWindows();
@@ -46,18 +45,18 @@ public:
     void resize(int cols, int rows);
 
     // Drain accumulated stdout bytes. The callback is invoked on the
-    // calling thread (typically the Godot main thread) with a contiguous
-    // span of bytes that's owned by a temporary local buffer.
+    // calling thread with a contiguous span of bytes owned by a temporary
+    // local buffer (valid only for the duration of the call).
     using DrainFn = std::function<void(const char *, std::size_t)>;
     void drain(const DrainFn &cb);
 
 private:
-    // Stored as void* — actually HPCON / HANDLE.
+    // Opaque handles — actually HPCON / HANDLE.
     void *h_pc_ = nullptr;
-    void *h_in_write_ = nullptr;   // our end of stdin pipe (we write)
-    void *h_out_read_ = nullptr;   // our end of stdout pipe (we read)
-    void *h_proc_ = nullptr;       // child process
-    void *h_thread_handle_ = nullptr; // child main thread (closed early)
+    void *h_in_write_ = nullptr;     // child stdin pipe, write end
+    void *h_out_read_ = nullptr;     // child stdout pipe, read end
+    void *h_proc_ = nullptr;         // child process
+    void *h_thread_handle_ = nullptr;// child main thread
 
     std::thread reader_;
     std::mutex buf_mu_;

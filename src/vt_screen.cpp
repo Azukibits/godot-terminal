@@ -12,9 +12,10 @@ namespace godot {
 
 namespace {
 
-// libvterm gives integer-valued indexed colors. For cells flagged
-// DEFAULT_FG/BG we substitute the user-configured Terminal colors instead of
-// libvterm's palette default (gray/black) so it looks like the user expects.
+// Convert a VTermColor into a godot::Color. Cells flagged DEFAULT_FG/BG
+// are mapped to the host-configured default_fg / default_bg rather than
+// libvterm's intrinsic palette default (gray/black), which would otherwise
+// override the Terminal node's foreground_color / background_color.
 inline Color color_from_vterm(const VTermColor &c, const VTermScreen *screen,
                               const Color &default_fg, const Color &default_bg,
                               bool is_fg) {
@@ -72,7 +73,7 @@ int cb_movecursor(VTermPos pos, VTermPos /*oldpos*/, int visible, void *user) {
     return 1;
 }
 int cb_settermprop(VTermProp /*prop*/, VTermValue * /*val*/, void * /*user*/) {
-    // Ignore for Phase 3; Phase 6 will surface title / cursor-shape.
+    // Title / cursor-shape / mouse-mode props are not surfaced to the host yet.
     return 1;
 }
 int cb_bell(void * /*user*/) {
