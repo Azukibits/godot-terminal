@@ -12,14 +12,12 @@
 config.log
 msvc_capture.log
 
-# IDE
+# IDE / editor caches
 .idea/
-cmake-build-*/
 .vscode/
-*.swp
-
-# Claude Code project-local data
 .claude/
+cmake-build-*/
+*.swp
 
 # Godot
 demo/.godot/

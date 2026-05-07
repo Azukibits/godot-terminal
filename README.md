@@ -1,5 +1,7 @@
 # godot-terminal
 
+**English** · [中文](README.zh-CN.md)
+
 > Embed a real terminal inside Godot's editor — run `cmd.exe`, `claude-code`,
 > `codex`, or any TUI program without leaving the engine.
 
@@ -12,6 +14,13 @@ The `Terminal` class is also a regular `Control` node, so you can drop one
 into a runtime scene if you want an in-game console.
 
 [![build](https://github.com/Azukibits/godot-terminal/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Azukibits/godot-terminal/actions/workflows/build.yml)
+
+![Godot editor with the Terminal tab open in the bottom panel](docs/img1.png)
+
+Switch shells and TUI tools in the same panel — no separate window, no
+context switch:
+
+![Same panel running OpenAI Codex right after a claude-code session](docs/img2.png)
 
 ## Features
 
