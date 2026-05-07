@@ -58,6 +58,91 @@ macOS / Linux are on the roadmap.
    (next to *Output*, *Debugger*, *Audio*). Click it, click inside the
    panel to focus, type away.
 
+## Troubleshooting
+
+### Windows blocks the GDExtension DLL after downloading
+
+If you installed the plugin from a downloaded `.zip`, Windows may mark the
+included `.dll` files as downloaded from the Internet. This is called
+`Zone.Identifier` / Mark-of-the-Web.
+
+When this happens, Godot may fail to load the GDExtension library even though
+the files are in the correct location.
+
+The plugin folder should look like this inside your Godot project:
+
+```text
+your_project/
+└── addons/
+    └── godot_terminal/
+        └── bin/
+            ├── godot_terminal.windows.template_debug.x86_64.dll
+            └── godot_terminal.windows.template_release.x86_64.dll
+```
+
+To check whether the DLLs are blocked, close Godot and run the following command
+in PowerShell. Replace the path with your real project path:
+
+```powershell
+Get-Item "C:\path\to\your_project\addons\godot_terminal\bin\*.dll" | ForEach-Object {
+    $z = Get-Item $_.FullName -Stream Zone.Identifier -ErrorAction SilentlyContinue
+    "{0}  --  Zone: {1}" -f $_.Name, $(if ($z) { 'BLOCKED' } else { 'ok' })
+}
+```
+
+Example output when the DLLs are blocked:
+
+```text
+godot_terminal.windows.template_debug.x86_64.dll  --  Zone: BLOCKED
+godot_terminal.windows.template_release.x86_64.dll  --  Zone: BLOCKED
+```
+
+To unblock only the DLL files, run:
+
+```powershell
+Unblock-File -Path "C:\path\to\your_project\addons\godot_terminal\bin\*.dll"
+```
+
+To unblock the entire plugin folder, run:
+
+```powershell
+Get-ChildItem "C:\path\to\your_project\addons\godot_terminal" -Recurse | Unblock-File
+```
+
+After unblocking, verify again:
+
+```powershell
+Get-Item "C:\path\to\your_project\addons\godot_terminal\bin\*.dll" | ForEach-Object {
+    $z = Get-Item $_.FullName -Stream Zone.Identifier -ErrorAction SilentlyContinue
+    "{0}  --  Zone: {1}" -f $_.Name, $(if ($z) { 'BLOCKED' } else { 'ok' })
+}
+```
+
+Expected output:
+
+```text
+godot_terminal.windows.template_debug.x86_64.dll  --  Zone: ok
+godot_terminal.windows.template_release.x86_64.dll  --  Zone: ok
+```
+
+Then reopen Godot and enable the plugin again:
+
+```text
+Project → Project Settings → Plugins → godot_terminal
+```
+
+If you still have the original downloaded `.zip`, you can also unblock the zip
+before extracting it:
+
+```powershell
+Unblock-File -Path "C:\path\to\godot_terminal-vX.Y.Z-win64.zip"
+```
+
+Then extract it again into your project's `addons/` folder.
+
+> Only unblock files downloaded from a trusted source, such as this repository's
+> official Releases page, or files you built yourself from source.
+
 ## Build from source
 
 For developers who want to hack on the plugin or build for an
