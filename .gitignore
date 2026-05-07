@@ -1,0 +1,35 @@
+# Build artifacts
+*.obj
+*.o
+*.lib
+*.exp
+*.dll
+*.pdb
+*.so
+*.dylib
+.sconsign.dblite
+.sconf_temp/
+config.log
+msvc_capture.log
+
+# IDE
+.idea/
+cmake-build-*/
+.vscode/
+*.swp
+
+# Claude Code project-local data
+.claude/
+
+# Godot
+demo/.godot/
+demo/.import/
+demo/export.cfg
+demo/export_presets.cfg
+
+# Plugin output (rebuilt by SCons)
+demo/addons/godot_terminal/bin/
+
+# OS
+.DS_Store
+Thumbs.db
