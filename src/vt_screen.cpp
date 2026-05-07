@@ -39,8 +39,20 @@ inline void convert_cell(const VTermScreenCell &c, const VTermScreen *screen,
                          const Color &default_fg, const Color &default_bg,
                          VTRenderCell &out) {
     out = VTRenderCell{};
+
+    // libvterm uses chars[0] == (uint32_t)-1 as a sentinel for the right
+    // half of a wide (CJK / emoji) character cell. Such a cell still
+    // reports width == 1, so the renderer must skip it via width == 0
+    // here, otherwise 0xFFFFFFFF gets fed to Font::draw_char().
+    const uint32_t cp = c.chars[0];
+    if (cp == static_cast<uint32_t>(-1)) {
+        out.ch = U' ';
+        out.width = 0;
+        return;
+    }
+
     out.width = c.width;
-    out.ch = c.chars[0] != 0 ? static_cast<char32_t>(c.chars[0]) : U' ';
+    out.ch = cp != 0 ? static_cast<char32_t>(cp) : U' ';
     out.bold = c.attrs.bold != 0;
     out.italic = c.attrs.italic != 0;
     out.underline = c.attrs.underline != 0;

@@ -355,12 +355,12 @@ void Terminal::_gui_input(const Ref<InputEvent> &p_event) {
         vt_->keyboard_key(vt_key, mod);
         handled = true;
     } else {
-        uint32_t ch = static_cast<uint32_t>(key->get_unicode());
-        if (ch != 0) {
+        int32_t ch_signed = static_cast<int32_t>(key->get_unicode());
+        if (ch_signed > 0 && ch_signed <= 0x10FFFF) {
             // For printable chars, shift is already baked into the case of `ch`.
             // Pass only Ctrl/Alt to libvterm so e.g. 'A' doesn't turn into Shift+'A'.
             int unichar_mod = mod & (VT_MOD_CTRL | VT_MOD_ALT);
-            vt_->keyboard_unichar(ch, unichar_mod);
+            vt_->keyboard_unichar(static_cast<uint32_t>(ch_signed), unichar_mod);
             handled = true;
         } else if (mod & VT_MOD_CTRL) {
             // Ctrl+<letter> sometimes arrives with unicode=0 (e.g. Ctrl+@ → 0).
