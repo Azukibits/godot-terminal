@@ -1,64 +1,147 @@
-# godot_terminal
+# godot-terminal
 
-A Godot 4.3+ GDExtension that embeds a real terminal (Windows ConPTY + libvterm)
-into Godot, so you can run vibecoding tools like
-[claude-code](https://github.com/anthropics/claude-code) and
-[codex](https://github.com/openai/codex) inside the engine.
+> Embed a real terminal inside Godot's editor — run `cmd.exe`, `claude-code`,
+> `codex`, or any TUI program without leaving the engine.
 
-> **Status: Phase 1 (skeleton).** Builds and loads as a GDExtension; the
-> `Terminal` node can be added to a scene. PTY and VT integration land in
-> later phases — see [the roadmap](#roadmap).
+A C++ GDExtension for Godot 4.3+ that adds a **Terminal** tab to the editor's
+bottom panel. Built on Windows ConPTY + libvterm, so any modern command-line
+tool (vim-style apps, AI coding assistants, build watchers, REPLs) works the
+same as it would in Windows Terminal.
 
-## Platform support
+The `Terminal` class is also a regular `Control` node, so you can drop one
+into a runtime scene if you want an in-game console.
 
-- Windows 10 1809+ (ConPTY)
+[![build](https://github.com/Azukibits/godot-terminal/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Azukibits/godot-terminal/actions/workflows/build.yml)
 
-macOS / Linux are out of scope for the initial release. PRs welcome later.
+## Features
 
-## Build
+- Real ANSI/xterm terminal emulator powered by **libvterm 0.3.3**
+  (truecolor, 256-color, indexed palette, bold/italic/underline,
+  alt-screen, mouse-aware programs)
+- Spawns child processes via Windows **ConPTY**
+  (`cmd.exe`, `powershell.exe`, `claude-code`, `codex`, …)
+- Full keyboard support: arrows, `F1`–`F12`, `Ctrl/Alt` combos, `Tab`,
+  `Esc`, `Backspace`, function keys
+- 5000-line **scrollback** with mouse-wheel navigation; key input
+  auto-snaps to the live view
+- Mouse wheel scrolling; **Shift+wheel** scrolls a page
+- Shells start in your **open Godot project's directory** by default,
+  so AI coding tools see the right codebase
+- No runtime dependencies beyond a Godot 4.3+ editor and a Win10 1809+ host
+
+## Requirements
+
+- **Windows 10 1809+** (ConPTY API)
+- **Godot 4.3+**
+
+macOS / Linux are on the roadmap.
+
+## Quick install (recommended)
+
+1. Grab the latest **`godot_terminal-vX.Y.Z-win64.zip`** from the
+   [Releases page](https://github.com/Azukibits/godot-terminal/releases).
+2. Extract it. Copy the `godot_terminal/` folder it contains into your
+   Godot project's `addons/` directory, so you end up with
+   `your_project/addons/godot_terminal/`.
+3. In Godot, open *Project → Project Settings → Plugins* and tick
+   **godot_terminal** to enable it.
+4. A **Terminal** tab now appears in the editor's bottom panel
+   (next to *Output*, *Debugger*, *Audio*). Click it, click inside the
+   panel to focus, type away.
+
+## Build from source
+
+For developers who want to hack on the plugin or build for an
+unreleased Godot/Windows combination.
 
 Prerequisites:
 
 - Visual Studio 2019/2022 with the *Desktop development with C++* workload
 - Python 3.8+
 - SCons 4.x (`pip install scons`)
-- Godot 4.3+ to test the demo
 
-Build the extension (run from a *Developer Command Prompt for VS* so `cl.exe`
-is on PATH, or after `vcvarsall.bat amd64`):
-
-```
-git clone --recurse-submodules <your-fork-url>
-cd godot_terminal
-scons platform=windows target=template_debug arch=x86_64
+```sh
+git clone --recurse-submodules https://github.com/Azukibits/godot-terminal.git
+cd godot-terminal
+scons platform=windows target=template_release arch=x86_64
 ```
 
-The DLL is written to `demo/addons/godot_terminal/bin/`. Open `demo/` in
-Godot 4.3+ — the extension is wired up as an editor plugin that adds a
-**Terminal** tab to the editor's bottom panel (next to Output / Debugger /
-Audio). The `Terminal` class is also a regular Control node, so you can
-drop one into a runtime scene if you want an in-game terminal.
+The DLL is written into `demo/addons/godot_terminal/bin/`. Open `demo/`
+in Godot 4.3+ to test against the bundled demo project. SCons normally
+locates MSVC automatically via `vswhere`; if it can't, run from a
+*Developer Command Prompt for VS* (or after `vcvarsall.bat amd64`).
 
-## Roadmap
+## Use from GDScript
 
-| Phase | Status | Goal |
-|-------|--------|------|
-| 1 | done   | Skeleton: extension loads, `Terminal` node exists |
-| 2 | done   | Font + dummy cell rendering (16-color palette demo) |
-| 3 | done   | libvterm 0.3.3 vendored; cells rendered from real VT parser |
-| 4 | done   | ConPTY: spawn child via `start_process()`, drain stdout, `send_input()` |
-| 5 | done   | Keyboard input: arrows, F-keys, Ctrl/Alt combos via `vterm_keyboard_*` |
-| 5.5 | done | Scrollback: mouse wheel scrolls up to 5000 lines; key input snaps to bottom |
-| 6 | todo   | Cursor blink / mouse-button forwarding / selection / auto-resize / styled glyphs |
-| 7 | todo   | claude-code / codex compatibility passes |
-| 8 | todo   | Release on GitHub with CI builds |
+The editor plugin auto-mounts a `Terminal` instance in the bottom panel.
+You can also create one yourself at runtime:
+
+```gdscript
+var term := Terminal.new()
+term.cols = 100
+term.rows = 30
+term.font_size = 14
+add_child(term)
+
+# Spawn a shell. Empty cwd = inherit; otherwise an absolute path.
+term.start_process("powershell.exe", [], "C:/path/to/your/project")
+
+# Pipe text directly to the child's stdin.
+term.send_input("Get-Process | Select -First 5\r\n")
+
+# Connect to lifecycle signals.
+term.process_exited.connect(func(code): print("exited: ", code))
+```
+
+Selected API (see [`src/terminal.h`](src/terminal.h) for the full set):
+
+| Member | Purpose |
+|--------|---------|
+| `start_process(exe, args, cwd)` | Spawn a child via ConPTY |
+| `stop_process()` | Kill the child and detach the PTY |
+| `send_input(text)` / `send_input_bytes(data)` | Write to child stdin |
+| `write_text(s)` / `write_bytes(b)` | Inject bytes directly into the VT parser (no PTY) |
+| `cols` / `rows` | Cell-grid size; resizing also resizes the ConPTY |
+| `font` / `font_size` | Use a `SystemFont` or `FontFile`; monospace recommended |
+| `scroll_to_bottom()` / `scroll_by(n)` / `clear_scrollback()` | Scrollback view controls |
+| `set_max_scrollback(n)` | Default 5000 lines |
+| Signals: `process_started`, `process_exited(exit_code)` | Child lifecycle |
+
+## Status / roadmap
+
+What works today (`v0.1.0`):
+
+- [x] GDExtension scaffolding, Godot 4.3+ load
+- [x] libvterm-driven cell rendering with full color/style data plumbed
+- [x] ConPTY child process spawn + bidirectional I/O
+- [x] Keyboard input mapping (arrows, F-keys, Ctrl/Alt, etc.)
+- [x] Scrollback (5000 lines, mouse-wheel)
+- [x] Shell `cwd` defaults to the open Godot project root
+
+Planned next:
+
+- [ ] Cursor blink + shape (block / bar / underline)
+- [ ] Mouse-button forwarding to TUI apps (xterm mouse modes)
+- [ ] Selection + clipboard copy/paste
+- [ ] Auto-resize when the panel size changes (cols/rows from cell math)
+- [ ] Bold / italic / underline glyph rendering (data already piped through)
+- [ ] `claude-code` / `codex` compatibility pass — fix bugs surfaced
+  by their richer TUI rendering
+- [ ] macOS + Linux backends (`forkpty` / `posix_openpt`)
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
 
 Bundled third-party code:
 
-- **godot-cpp** — MIT (Godot Engine contributors)
-- **libvterm 0.3.3** — MIT (Paul "LeoNerd" Evans), vendored under
-  `thirdparty/libvterm/`; see `thirdparty/libvterm/LICENSE`
+- **[godot-cpp](https://github.com/godotengine/godot-cpp)** — MIT
+  (Godot Engine project)
+- **[libvterm 0.3.3](https://www.leonerd.org.uk/code/libvterm/)** by
+  Paul "LeoNerd" Evans — MIT (vendored under `thirdparty/libvterm/`)
+
+## Acknowledgments
+
+This plugin exists because libvterm is good at being a terminal, ConPTY
+is good at faking one, and Godot exposes enough of its rendering API
+to a Control node that you can paint cells fast enough not to notice.

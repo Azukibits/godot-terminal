@@ -54,6 +54,7 @@ func _spawn_default_shell() -> void:
 	# like claude-code see THE project the user has open in the editor — not
 	# the godot_terminal plugin's source tree.
 	var project_cwd: String = ProjectSettings.globalize_path("res://")
+	print("[godot_terminal] spawning cmd.exe with cwd=", project_cwd)
 	var ok: bool = _terminal.start_process("cmd.exe", PackedStringArray(), project_cwd)
 	if not ok:
 		push_error("[godot_terminal] cmd.exe failed to start")
