@@ -2,68 +2,155 @@
 
 [English](README.md) · **中文**
 
-> 在 Godot 编辑器里嵌入一个真正的终端 —— `cmd.exe`、`claude-code`、`codex`
-> 任何 TUI 程序都可以直接跑，不用离开引擎。
+> 在 Godot 编辑器中嵌入一个真正的终端 —— 无需离开引擎，就可以运行
+> `cmd.exe`、`claude-code`、`codex` 或任何 TUI 命令行程序。
 
-为 Godot 4.3+ 编写的 C++ GDExtension，在编辑器底部面板加一个 **Terminal**
-标签页。基于 Windows ConPTY + libvterm，所以任何现代命令行工具
-（vim 风格应用、AI 编程助手、构建监视器、REPL）都能像在 Windows Terminal
-里一样正常工作。
+这是一个适用于 Godot 4.3+ 的 C++ GDExtension 插件。它会在 Godot 编辑器
+底部面板中添加一个 **Terminal** 标签页。插件基于 Windows ConPTY 和
+libvterm 实现，因此现代命令行工具，例如类 vim 程序、AI 编程助手、构建监听器、
+REPL 等，可以像在 Windows Terminal 中一样运行。
 
-`Terminal` 类同时是个普通的 `Control` 节点，丢进运行时场景就能当游戏内
-控制台用。
+`Terminal` 类本身也是一个普通的 `Control` 节点，因此你也可以把它放进运行时场景中，
+用来实现游戏内控制台或调试终端。
 
 [![build](https://github.com/Azukibits/godot-terminal/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Azukibits/godot-terminal/actions/workflows/build.yml)
 
-![Godot 编辑器底部面板里打开的 Terminal 标签页](docs/img1.png)
+![Godot editor with the Terminal tab open in the bottom panel](docs/img1.png)
 
-同一个面板里随便切换 shell 和 TUI 工具 —— 不用开额外窗口，也不用切上下文：
+在同一个面板中切换 shell 和 TUI 工具 —— 不需要单独打开窗口，也不需要来回切换上下文：
 
-![claude-code 会话刚结束、紧接着在同一面板跑 OpenAI Codex](docs/img2.png)
+![Same panel running OpenAI Codex right after a claude-code session](docs/img2.png)
 
-## 功能
+## 功能特性
 
-- 真正的 ANSI / xterm 终端模拟，由 **libvterm 0.3.3** 驱动
-  （truecolor、256 色、调色板色、粗体/斜体/下划线、备用屏幕、
-  鼠标交互的程序）
+- 基于 **libvterm 0.3.3** 的真实 ANSI/xterm 终端模拟器
+  （支持 truecolor、256 色、索引调色板、粗体、斜体、下划线、
+  alt-screen、支持鼠标感知的程序）
 - 通过 Windows **ConPTY** 启动子进程
-  （`cmd.exe`、`powershell.exe`、`claude-code`、`codex`……）
+  （`cmd.exe`、`powershell.exe`、`claude-code`、`codex` 等）
 - 完整键盘支持：方向键、`F1`–`F12`、`Ctrl/Alt` 组合键、`Tab`、
   `Esc`、`Backspace`、功能键
-- 5000 行 **滚动历史**，鼠标滚轮翻阅；按键自动跳回最新位置
-- 鼠标滚轮滚动；**Shift+滚轮** 翻页
-- 子进程默认在你**当前打开的 Godot 项目根目录**启动，
-  AI 编程工具自然能识别正确的项目
-- 编辑器之外没有运行时依赖（除了 Godot 4.3+ 与 Win10 1809+ 系统）
+- 5000 行 **scrollback** 历史滚动，支持鼠标滚轮导航；键盘输入会自动回到底部实时视图
+- 鼠标滚轮滚动；**Shift+滚轮** 按页滚动
+- Shell 默认从当前打开的 **Godot 项目目录** 启动，
+  因此 AI 编程工具可以直接看到正确的代码库
+- 除 Godot 4.3+ 编辑器和 Windows 10 1809+ 主机外，无额外运行时依赖
 
 ## 系统要求
 
-- **Windows 10 1809 及以上**（ConPTY API）
-- **Godot 4.3 及以上**
+- **Windows 10 1809+**，需要 ConPTY API
+- **Godot 4.3+**
 
-macOS / Linux 在路线图里。
+macOS / Linux 支持在路线图中。
 
-## 快速安装（推荐）
+## 快速安装，推荐方式
 
 1. 从 [Releases 页面](https://github.com/Azukibits/godot-terminal/releases)
    下载最新的 **`godot_terminal-vX.Y.Z-win64.zip`**。
-2. 解压。把里面的 `godot_terminal/` 文件夹复制到你 Godot 项目的
-   `addons/` 目录下，最终路径形如
+2. 解压压缩包。将其中的 `godot_terminal/` 文件夹复制到你的 Godot 项目的
+   `addons/` 目录中，最终路径应该是：
    `your_project/addons/godot_terminal/`。
-3. 在 Godot 里打开 *项目 → 项目设置 → 插件* 勾选 **godot_terminal**
-   启用。
-4. 编辑器底部面板会多一个 **Terminal** 标签页（在 *输出* / *调试器* /
-   *音频* 旁边）。点开，点一下面板内部获取焦点，开始打字。
+3. 在 Godot 中打开：
+   *Project → Project Settings → Plugins*，
+   勾选 **godot_terminal** 启用插件。
+4. 编辑器底部面板中会出现 **Terminal** 标签页
+   （在 *Output*、*Debugger*、*Audio* 附近）。点击该面板并聚焦后即可输入命令。
+
+## 故障排查
+
+### Windows 下载后阻止 GDExtension DLL
+
+如果你是从 `.zip` 压缩包安装插件，Windows 可能会把其中的 `.dll` 文件标记为
+“来自互联网的文件”。这个标记叫做：
+
+```text
+Zone.Identifier / Mark-of-the-Web
+```
+
+出现这种情况时，即使插件文件位置正确，Godot 也可能无法加载 GDExtension DLL。
+
+插件目录在 Godot 项目中应该类似这样：
+
+```text
+your_project/
+└── addons/
+    └── godot_terminal/
+        └── bin/
+            ├── godot_terminal.windows.template_debug.x86_64.dll
+            └── godot_terminal.windows.template_release.x86_64.dll
+```
+
+要检查 DLL 是否被阻止，请先关闭 Godot，然后在 PowerShell 中运行下面的命令。
+请将路径替换成你的真实项目路径：
+
+```powershell
+Get-Item "C:\path\to\your_project\addons\godot_terminal\bin\*.dll" | ForEach-Object {
+    $z = Get-Item $_.FullName -Stream Zone.Identifier -ErrorAction SilentlyContinue
+    "{0}  --  Zone: {1}" -f $_.Name, $(if ($z) { 'BLOCKED' } else { 'ok' })
+}
+```
+
+如果 DLL 被阻止，会看到类似输出：
+
+```text
+godot_terminal.windows.template_debug.x86_64.dll  --  Zone: BLOCKED
+godot_terminal.windows.template_release.x86_64.dll  --  Zone: BLOCKED
+```
+
+只解锁 DLL 文件：
+
+```powershell
+Unblock-File -Path "C:\path\to\your_project\addons\godot_terminal\bin\*.dll"
+```
+
+或者解锁整个插件目录：
+
+```powershell
+Get-ChildItem "C:\path\to\your_project\addons\godot_terminal" -Recurse | Unblock-File
+```
+
+解锁后可以再次检查：
+
+```powershell
+Get-Item "C:\path\to\your_project\addons\godot_terminal\bin\*.dll" | ForEach-Object {
+    $z = Get-Item $_.FullName -Stream Zone.Identifier -ErrorAction SilentlyContinue
+    "{0}  --  Zone: {1}" -f $_.Name, $(if ($z) { 'BLOCKED' } else { 'ok' })
+}
+```
+
+正常情况下应该显示：
+
+```text
+godot_terminal.windows.template_debug.x86_64.dll  --  Zone: ok
+godot_terminal.windows.template_release.x86_64.dll  --  Zone: ok
+```
+
+然后重新打开 Godot，并重新启用插件：
+
+```text
+Project → Project Settings → Plugins → godot_terminal
+```
+
+如果你还保留着原始下载的 `.zip` 文件，也可以先解锁压缩包再重新解压：
+
+```powershell
+Unblock-File -Path "C:\path\to\godot_terminal-vX.Y.Z-win64.zip"
+```
+
+然后重新解压到项目的 `addons/` 目录中。
+
+> 只应解锁来自可信来源的文件，例如本仓库官方 Releases 页面下载的文件，
+> 或者你自己从源码编译出来的文件。
 
 ## 从源码构建
 
-适合想改插件源码、或为某个尚未发布的 Godot/Windows 组合自行构建的开发者。
+适合想要修改插件，或者为尚未发布的 Godot / Windows 组合自行构建的开发者。
 
-依赖：
+前置要求：
 
-- Visual Studio 2019/2022，勾选 *使用 C++ 的桌面开发* 工作负载
+- Visual Studio 2019/2022，并安装 *Desktop development with C++* 工作负载
 - Python 3.8+
-- SCons 4.x（`pip install scons`）
+- SCons 4.x，安装命令：`pip install scons`
 
 ```sh
 git clone --recurse-submodules https://github.com/Azukibits/godot-terminal.git
@@ -71,15 +158,25 @@ cd godot-terminal
 scons platform=windows target=template_release arch=x86_64
 ```
 
-dll 会被写到 `demo/addons/godot_terminal/bin/`。直接用 Godot 4.3+
-打开 `demo/` 即可对照测试。SCons 通常能通过 `vswhere` 自动找到 MSVC；
-如果失败，请从 *Developer Command Prompt for VS* 启动（或先跑
-`vcvarsall.bat amd64`）。
+构建生成的 DLL 会写入：
+
+```text
+demo/addons/godot_terminal/bin/
+```
+
+用 Godot 4.3+ 打开 `demo/` 即可测试内置 demo 项目。
+
+SCons 通常会通过 `vswhere` 自动定位 MSVC。如果定位失败，请从
+*Developer Command Prompt for VS* 运行构建命令，或者先执行：
+
+```bat
+vcvarsall.bat amd64
+```
 
 ## 在 GDScript 中使用
 
-启用插件后，编辑器底部面板会自动挂载一个 `Terminal` 实例。也可以在
-运行时自己创建：
+编辑器插件会自动在底部面板挂载一个 `Terminal` 实例。
+你也可以在运行时自己创建一个：
 
 ```gdscript
 var term := Terminal.new()
@@ -88,64 +185,64 @@ term.rows = 30
 term.font_size = 14
 add_child(term)
 
-# spawn 一个 shell。cwd 留空 = 继承父进程；否则填绝对路径。
+# 启动一个 shell。cwd 为空表示继承当前目录；否则传入绝对路径。
 term.start_process("powershell.exe", [], "C:/path/to/your/project")
 
-# 直接往子进程的 stdin 写文本。
+# 直接向子进程 stdin 写入文本。
 term.send_input("Get-Process | Select -First 5\r\n")
 
-# 监听生命周期信号。
+# 连接进程生命周期信号。
 term.process_exited.connect(func(code): print("exited: ", code))
 ```
 
-部分 API（完整列表见 [`src/terminal.h`](src/terminal.h)）：
+部分 API 如下，完整内容见 [`src/terminal.h`](src/terminal.h)：
 
 | 成员 | 用途 |
 |------|------|
-| `start_process(exe, args, cwd)` | 经 ConPTY 启动子进程 |
-| `stop_process()` | 杀掉子进程并释放 PTY |
+| `start_process(exe, args, cwd)` | 通过 ConPTY 启动子进程 |
+| `stop_process()` | 终止子进程并断开 PTY |
 | `send_input(text)` / `send_input_bytes(data)` | 写入子进程 stdin |
-| `write_text(s)` / `write_bytes(b)` | 直接喂字节给 VT 解析器（不经 PTY） |
-| `cols` / `rows` | 字符网格尺寸；改变时同步 resize ConPTY |
-| `font` / `font_size` | 接受 `SystemFont` 或 `FontFile`；建议等宽字体 |
-| `scroll_to_bottom()` / `scroll_by(n)` / `clear_scrollback()` | 滚动视图控制 |
-| `set_max_scrollback(n)` | 默认 5000 行 |
-| 信号 `process_started`, `process_exited(exit_code)` | 子进程生命周期 |
+| `write_text(s)` / `write_bytes(b)` | 直接向 VT 解析器注入字节，不经过 PTY |
+| `cols` / `rows` | 终端字符网格大小；调整时也会调整 ConPTY 尺寸 |
+| `font` / `font_size` | 使用 `SystemFont` 或 `FontFile`；推荐使用等宽字体 |
+| `scroll_to_bottom()` / `scroll_by(n)` / `clear_scrollback()` | 历史滚动视图控制 |
+| `set_max_scrollback(n)` | 设置最大历史行数，默认 5000 行 |
+| 信号：`process_started`、`process_exited(exit_code)` | 子进程生命周期信号 |
 
 ## 状态 / 路线图
 
-`v0.1.0` 已实现：
+当前已完成，`v0.1.0`：
 
-- [x] GDExtension 骨架，可被 Godot 4.3+ 加载
-- [x] libvterm 驱动的字符网格渲染（颜色、属性已全数贯通）
-- [x] ConPTY 子进程 spawn + 双向 I/O
-- [x] 键盘输入映射（方向键、F 键、Ctrl/Alt 等）
-- [x] 滚动历史（5000 行、鼠标滚轮）
-- [x] shell 默认 `cwd` 指向当前 Godot 项目根
+- [x] GDExtension 框架，可在 Godot 4.3+ 加载
+- [x] 基于 libvterm 的字符单元渲染，颜色和样式数据已打通
+- [x] ConPTY 子进程启动和双向 I/O
+- [x] 键盘输入映射，方向键、功能键、Ctrl/Alt 等
+- [x] Scrollback 历史滚动，5000 行，支持鼠标滚轮
+- [x] Shell 的 `cwd` 默认设置为当前打开的 Godot 项目根目录
 
-接下来计划：
+计划中的功能：
 
-- [ ] 光标闪烁 + 形状（block / bar / underline）
-- [ ] 鼠标按键转发到 TUI 程序（xterm 鼠标模式）
-- [ ] 选区 + 剪贴板复制粘贴
-- [ ] 面板尺寸变化时自动按 cell 大小算 cols/rows 重新 resize
-- [ ] 粗体 / 斜体 / 下划线字形渲染（数据已贯通，差画的部分）
-- [ ] `claude-code` / `codex` 兼容性打磨 —— 修它们更复杂的 TUI 渲染暴露的问题
-- [ ] macOS + Linux 后端（`forkpty` / `posix_openpt`）
+- [ ] 光标闪烁和形状，方块 / 竖线 / 下划线
+- [ ] 将鼠标按键转发给 TUI 应用，xterm mouse modes
+- [ ] 选择文本和剪贴板复制 / 粘贴
+- [ ] 面板尺寸变化时自动调整终端列数和行数
+- [ ] 粗体 / 斜体 / 下划线字形渲染，数据已经接入
+- [ ] `claude-code` / `codex` 兼容性专项处理，修复复杂 TUI 渲染暴露的问题
+- [ ] macOS + Linux 后端，`forkpty` / `posix_openpt`
 
-## 许可
+## 许可证
 
-本项目使用 MIT 协议 —— 见 [LICENSE](LICENSE)。
+MIT — 见 [LICENSE](LICENSE)。
 
-随项目附带的第三方代码：
+内置第三方代码：
 
 - **[godot-cpp](https://github.com/godotengine/godot-cpp)** — MIT
-  （Godot Engine 项目）
-- **[libvterm 0.3.3](https://www.leonerd.org.uk/code/libvterm/)** —
-  作者 Paul "LeoNerd" Evans —— MIT（在 `thirdparty/libvterm/` 下随源码分发）
+  ，Godot Engine 项目
+- **[libvterm 0.3.3](https://www.leonerd.org.uk/code/libvterm/)**，
+  作者 Paul "LeoNerd" Evans — MIT，已 vendored 到 `thirdparty/libvterm/`
 
 ## 致谢
 
-这个插件能跑起来，是因为 libvterm 把"模拟终端"这件事做得很好，
-ConPTY 把"伪装成终端"这件事做得很好，而 Godot 给一个 Control 节点
-开放的渲染 API 也足够丰富，可以一帧画出几千个字符的 cell 而不卡。
+这个插件之所以能存在，是因为 libvterm 很擅长做终端，ConPTY 很擅长伪装终端，
+而 Godot 暴露了足够多的渲染 API，让一个 `Control` 节点可以足够快地绘制字符单元，
+快到你几乎察觉不到。
