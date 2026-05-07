@@ -10,6 +10,9 @@ bottom panel. Built on Windows ConPTY + libvterm, so any modern command-line
 tool (vim-style apps, AI coding assistants, build watchers, REPLs) works the
 same as it would in Windows Terminal.
 
+please always use the latest version 
+More features will be added
+
 The `Terminal` class is also a regular `Control` node, so you can drop one
 into a runtime scene if you want an in-game console.
 
