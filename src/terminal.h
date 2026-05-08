@@ -95,6 +95,22 @@ private:
     // scrollback. Clamped to [0, vt_->scrollback_lines()].
     int scroll_offset_ = 0;
 
+    // Cursor blink: phase toggles every ~530ms while libvterm reports
+    // blinking is on. Typing resets the phase to "on" so the cursor stays
+    // visible during input.
+    bool blink_phase_on_ = true;
+    uint64_t blink_last_toggle_ms_ = 0;
+
+    // Mouse selection in absolute-row coordinates (stable across scroll).
+    // abs_row in [0, vt_->scrollback_lines()) = scrollback line index;
+    // abs_row in [scrollback_lines(), scrollback_lines() + rows_) = live row.
+    // Anchor row = -1 means no selection.
+    int sel_anchor_row_ = -1;
+    int sel_anchor_col_ = -1;
+    int sel_focus_row_ = -1;
+    int sel_focus_col_ = -1;
+    bool sel_dragging_ = false;
+
     std::unique_ptr<VTScreen> vt_;
 #ifdef _WIN32
     std::unique_ptr<PtyWindows> pty_;
@@ -107,6 +123,16 @@ private:
 
     void _on_draw();
     void _on_process();
+
+    // Selection helpers.
+    bool _has_selection() const;
+    void _clear_selection();
+    void _normalize_selection(int &r0, int &c0, int &r1, int &c1) const;
+    bool _read_abs_cell(int x, int abs_row, struct VTRenderCell &out) const;
+    Vector2i _local_to_cell_abs(const Vector2 &local) const; // -> (col, abs_row)
+    String _build_selection_text() const;
+    void _copy_selection_to_clipboard();
+    void _paste_from_clipboard();
 
     // Drains libvterm output (responses to keypresses/OSC) and writes to PTY.
     void _flush_vt_output_to_pty();

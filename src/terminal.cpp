@@ -5,10 +5,13 @@
 #include "pty_windows.h"
 #endif
 
+#include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/classes/global_constants.hpp>
 #include <godot_cpp/classes/input_event_key.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
+#include <godot_cpp/classes/input_event_mouse_motion.hpp>
 #include <godot_cpp/classes/theme_db.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/string.hpp>
@@ -316,24 +319,64 @@ void Terminal::send_input_bytes(const PackedByteArray &p_data) {
 void Terminal::_gui_input(const Ref<InputEvent> &p_event) {
     // Mouse wheel & click first (no early-return to InputEventKey path).
     Ref<InputEventMouseButton> mb = p_event;
-    if (mb.is_valid() && mb->is_pressed()) {
+    if (mb.is_valid()) {
         int btn = static_cast<int>(mb->get_button_index());
-        if (btn == MOUSE_BUTTON_WHEEL_UP) {
-            int amount = mb->is_shift_pressed() ? rows_ - 1 : 3;
-            scroll_by(amount);
-            accept_event();
-            return;
+        if (mb->is_pressed()) {
+            if (btn == MOUSE_BUTTON_WHEEL_UP) {
+                int amount = mb->is_shift_pressed() ? rows_ - 1 : 3;
+                scroll_by(amount);
+                accept_event();
+                return;
+            }
+            if (btn == MOUSE_BUTTON_WHEEL_DOWN) {
+                int amount = mb->is_shift_pressed() ? rows_ - 1 : 3;
+                scroll_by(-amount);
+                accept_event();
+                return;
+            }
+            if (btn == MOUSE_BUTTON_LEFT) {
+                grab_focus();
+                Vector2i ca = _local_to_cell_abs(mb->get_position());
+                sel_anchor_col_ = ca.x;
+                sel_anchor_row_ = ca.y;
+                sel_focus_col_ = ca.x;
+                sel_focus_row_ = ca.y;
+                sel_dragging_ = true;
+                _redraw_soon();
+                accept_event();
+                return;
+            }
+            if (btn == MOUSE_BUTTON_MIDDLE) {
+                // Middle-click pastes (X11 convention; harmless on Windows).
+                _paste_from_clipboard();
+                accept_event();
+                return;
+            }
+        } else {
+            if (btn == MOUSE_BUTTON_LEFT && sel_dragging_) {
+                sel_dragging_ = false;
+                // A bare click (no drag) clears any selection.
+                if (sel_anchor_row_ == sel_focus_row_ &&
+                    sel_anchor_col_ == sel_focus_col_) {
+                    _clear_selection();
+                }
+                _redraw_soon();
+                accept_event();
+                return;
+            }
         }
-        if (btn == MOUSE_BUTTON_WHEEL_DOWN) {
-            int amount = mb->is_shift_pressed() ? rows_ - 1 : 3;
-            scroll_by(-amount);
-            accept_event();
-            return;
+    }
+
+    Ref<InputEventMouseMotion> mm = p_event;
+    if (mm.is_valid() && sel_dragging_) {
+        Vector2i ca = _local_to_cell_abs(mm->get_position());
+        if (ca.x != sel_focus_col_ || ca.y != sel_focus_row_) {
+            sel_focus_col_ = ca.x;
+            sel_focus_row_ = ca.y;
+            _redraw_soon();
         }
-        if (btn == MOUSE_BUTTON_LEFT) {
-            grab_focus();
-            // Don't accept_event so the panel can still receive clicks for selection later.
-        }
+        accept_event();
+        return;
     }
 
     Ref<InputEventKey> key = p_event;
@@ -347,6 +390,22 @@ void Terminal::_gui_input(const Ref<InputEvent> &p_event) {
     if (key->is_shift_pressed()) mod |= VT_MOD_SHIFT;
 
     int kc = static_cast<int>(key->get_keycode());
+
+    // Ctrl+Shift+C / Ctrl+Shift+V intercepted before reaching the VT, so
+    // Ctrl+C still sends SIGINT to the child unmodified.
+    if (key->is_ctrl_pressed() && key->is_shift_pressed()) {
+        if (kc == KEY_C) {
+            _copy_selection_to_clipboard();
+            accept_event();
+            return;
+        }
+        if (kc == KEY_V) {
+            _paste_from_clipboard();
+            accept_event();
+            return;
+        }
+    }
+
     int vt_key = godot_key_to_vt_key(kc);
 
     bool handled = false;
@@ -380,6 +439,9 @@ void Terminal::_gui_input(const Ref<InputEvent> &p_event) {
             scroll_offset_ = 0;
             _redraw_soon();
         }
+        // Reset blink so the cursor is visible immediately after input.
+        blink_phase_on_ = true;
+        blink_last_toggle_ms_ = Time::get_singleton()->get_ticks_msec();
         _flush_vt_output_to_pty();
         accept_event();
     }
@@ -469,6 +531,22 @@ void Terminal::_redraw_soon() {
 }
 
 void Terminal::_on_process() {
+    // Cursor blink: tick the phase every 530ms, repaint only on flips so
+    // we're not requeuing a redraw every frame.
+    if (vt_ && vt_->cursor_visible() && vt_->cursor_blink()) {
+        uint64_t now = Time::get_singleton()->get_ticks_msec();
+        if (blink_last_toggle_ms_ == 0) blink_last_toggle_ms_ = now;
+        if (now - blink_last_toggle_ms_ >= 530) {
+            blink_phase_on_ = !blink_phase_on_;
+            blink_last_toggle_ms_ = now;
+            _redraw_soon();
+        }
+    } else if (!blink_phase_on_) {
+        // Blink disabled but we were in the off phase — force on and repaint.
+        blink_phase_on_ = true;
+        _redraw_soon();
+    }
+
 #ifdef _WIN32
     if (!pty_) return;
 
@@ -552,16 +630,57 @@ void Terminal::_on_draw() {
         }
     }
 
-    // 3) Cursor — only inside the visible viewport. When scrolled into
-    // scrollback, the live cursor row maps to viewport y = live_cursor.y + K.
-    if (vt_->cursor_visible()) {
+    // 3) Selection overlay — translucent highlight over selected cells.
+    if (_has_selection()) {
+        int r0, c0, r1, c1;
+        _normalize_selection(r0, c0, r1, c1);
+        Color sel_color(0.30f, 0.55f, 1.00f, 0.35f);
+        for (int y = 0; y < rows; y++) {
+            int abs_row = (S - K) + y;
+            if (abs_row < r0 || abs_row > r1) continue;
+            int x_lo = (abs_row == r0) ? c0 : 0;
+            int x_hi = (abs_row == r1) ? c1 : cols - 1;
+            if (x_hi < x_lo) continue;
+            Vector2 pos(x_lo * cell_size_.x, y * cell_size_.y);
+            Vector2 ext((x_hi - x_lo + 1) * cell_size_.x, cell_size_.y);
+            draw_rect(Rect2(pos, ext), sel_color);
+        }
+    }
+
+    // 4) Cursor — shape from libvterm (block / underline / bar), with a
+    // blink phase driven by _on_process. When scrolled into scrollback the
+    // live cursor row maps to viewport y = live_cursor.y + K.
+    bool draw_cursor = vt_->cursor_visible() &&
+                       (!vt_->cursor_blink() || blink_phase_on_);
+    if (draw_cursor) {
         Vector2i cur = vt_->cursor();
         int viewport_y = cur.y + K;
         if (cur.x >= 0 && cur.x < cols && viewport_y >= 0 && viewport_y < rows) {
             Vector2 cell_pos(cur.x * cell_size_.x, viewport_y * cell_size_.y);
             Color cursor_color = foreground_color_;
-            cursor_color.a = 0.6f;
-            draw_rect(Rect2(cell_pos, cell_size_), cursor_color);
+            cursor_color.a = has_focus() ? 0.7f : 0.4f;
+            int shape = vt_->cursor_shape();
+            if (!has_focus()) {
+                // Unfocused: hollow block outline regardless of shape.
+                real_t t = std::max<real_t>(1.0f, cell_size_.y * 0.08f);
+                Color outline = cursor_color;
+                outline.a = 0.55f;
+                Vector2 inner_pos = cell_pos + Vector2(t, t);
+                Vector2 inner_ext = cell_size_ - Vector2(2 * t, 2 * t);
+                draw_rect(Rect2(cell_pos, cell_size_), outline);
+                if (inner_ext.x > 0 && inner_ext.y > 0) {
+                    draw_rect(Rect2(inner_pos, inner_ext), background_color_);
+                }
+            } else if (shape == VT_CURSOR_UNDERLINE) {
+                real_t h = std::max<real_t>(2.0f, cell_size_.y * 0.15f);
+                draw_rect(Rect2(Vector2(cell_pos.x, cell_pos.y + cell_size_.y - h),
+                                Vector2(cell_size_.x, h)), cursor_color);
+            } else if (shape == VT_CURSOR_BAR) {
+                real_t w = std::max<real_t>(2.0f, cell_size_.x * 0.15f);
+                draw_rect(Rect2(cell_pos, Vector2(w, cell_size_.y)), cursor_color);
+            } else { // VT_CURSOR_BLOCK
+                draw_rect(Rect2(cell_pos, cell_size_), cursor_color);
+            }
         }
     }
 
@@ -572,6 +691,118 @@ void Terminal::_on_draw() {
         real_t bar_w = std::max<real_t>(2.0f, cell_size_.x * 0.15f);
         draw_rect(Rect2(Vector2(size.x - bar_w, 0), Vector2(bar_w, size.y)), stripe);
     }
+}
+
+// --- selection / clipboard --------------------------------------------------
+
+bool Terminal::_has_selection() const {
+    if (sel_anchor_row_ < 0) return false;
+    if (sel_anchor_row_ == sel_focus_row_ && sel_anchor_col_ == sel_focus_col_) {
+        return false;
+    }
+    return true;
+}
+
+void Terminal::_clear_selection() {
+    sel_anchor_row_ = sel_anchor_col_ = -1;
+    sel_focus_row_ = sel_focus_col_ = -1;
+    sel_dragging_ = false;
+}
+
+void Terminal::_normalize_selection(int &r0, int &c0, int &r1, int &c1) const {
+    int ar = sel_anchor_row_, ac = sel_anchor_col_;
+    int fr = sel_focus_row_,  fc = sel_focus_col_;
+    if (ar < fr || (ar == fr && ac <= fc)) {
+        r0 = ar; c0 = ac; r1 = fr; c1 = fc;
+    } else {
+        r0 = fr; c0 = fc; r1 = ar; c1 = ac;
+    }
+}
+
+bool Terminal::_read_abs_cell(int x, int abs_row, VTRenderCell &out) const {
+    if (!vt_) return false;
+    int S = vt_->scrollback_lines();
+    if (abs_row < 0) return false;
+    if (abs_row < S) {
+        return vt_->read_scrollback_cell(x, abs_row, out);
+    }
+    return vt_->read_cell(x, abs_row - S, out);
+}
+
+Vector2i Terminal::_local_to_cell_abs(const Vector2 &local) const {
+    int col = static_cast<int>(local.x / std::max<real_t>(cell_size_.x, 1.0f));
+    int y   = static_cast<int>(local.y / std::max<real_t>(cell_size_.y, 1.0f));
+    if (col < 0) col = 0;
+    if (col > cols_ - 1) col = cols_ - 1;
+    if (y < 0) y = 0;
+    if (y > rows_ - 1) y = rows_ - 1;
+    int S = vt_ ? vt_->scrollback_lines() : 0;
+    int abs_row = (S - scroll_offset_) + y;
+    return Vector2i(col, abs_row);
+}
+
+String Terminal::_build_selection_text() const {
+    if (!_has_selection() || !vt_) return String();
+    int r0, c0, r1, c1;
+    _normalize_selection(r0, c0, r1, c1);
+
+    String out;
+    for (int row = r0; row <= r1; row++) {
+        int x_lo = (row == r0) ? c0 : 0;
+        int x_hi = (row == r1) ? c1 : cols_ - 1;
+
+        std::u32string line;
+        line.reserve(static_cast<size_t>(x_hi - x_lo + 1));
+        for (int x = x_lo; x <= x_hi; x++) {
+            VTRenderCell c;
+            if (!_read_abs_cell(x, row, c)) continue;
+            if (c.width == 0) continue; // right half of wide char
+            line.push_back(c.ch == 0 ? U' ' : c.ch);
+        }
+        // Trim trailing spaces (but keep them if the row is fully selected
+        // up to its right edge AND nothing follows on subsequent rows? — keep
+        // it simple: always trim).
+        while (!line.empty() && (line.back() == U' ')) line.pop_back();
+
+        if (row != r0) out += "\n";
+        out += String(reinterpret_cast<const char32_t *>(line.c_str()));
+    }
+    return out;
+}
+
+void Terminal::_copy_selection_to_clipboard() {
+    if (!_has_selection()) return;
+    String text = _build_selection_text();
+    if (text.is_empty()) return;
+    DisplayServer *ds = DisplayServer::get_singleton();
+    if (ds) ds->clipboard_set(text);
+}
+
+void Terminal::_paste_from_clipboard() {
+    DisplayServer *ds = DisplayServer::get_singleton();
+    if (!ds || !vt_) return;
+    String text = ds->clipboard_get();
+    if (text.is_empty()) return;
+
+    vt_->keyboard_start_paste();
+    // Iterate codepoints (Godot String stores UTF-32-ish via char32_t).
+    int n = text.length();
+    for (int i = 0; i < n; i++) {
+        char32_t cp = text[i];
+        // Normalize Windows clipboard CRLF / lone CR to '\r' which terminals
+        // expect from Enter. Strip the LF half.
+        if (cp == U'\r') {
+            vt_->keyboard_unichar(static_cast<uint32_t>('\r'), VT_MOD_NONE);
+            if (i + 1 < n && text[i + 1] == U'\n') i++; // skip LF after CR
+        } else if (cp == U'\n') {
+            vt_->keyboard_unichar(static_cast<uint32_t>('\r'), VT_MOD_NONE);
+        } else {
+            vt_->keyboard_unichar(static_cast<uint32_t>(cp), VT_MOD_NONE);
+        }
+    }
+    vt_->keyboard_end_paste();
+    _flush_vt_output_to_pty();
+    _redraw_soon();
 }
 
 } // namespace godot

@@ -84,8 +84,18 @@ int cb_movecursor(VTermPos pos, VTermPos /*oldpos*/, int visible, void *user) {
     static_cast<VTScreen *>(user)->_on_movecursor(pos.col, pos.row, visible != 0);
     return 1;
 }
-int cb_settermprop(VTermProp /*prop*/, VTermValue * /*val*/, void * /*user*/) {
-    // Title / cursor-shape / mouse-mode props are not surfaced to the host yet.
+int cb_settermprop(VTermProp prop, VTermValue *val, void *user) {
+    auto *self = static_cast<VTScreen *>(user);
+    switch (prop) {
+        case VTERM_PROP_CURSORBLINK:
+            self->_on_termprop_cursor_blink(val && val->boolean != 0);
+            break;
+        case VTERM_PROP_CURSORSHAPE:
+            self->_on_termprop_cursor_shape(val ? val->number : VT_CURSOR_BLOCK);
+            break;
+        default:
+            break;
+    }
     return 1;
 }
 int cb_bell(void * /*user*/) {
@@ -234,6 +244,27 @@ void VTScreen::keyboard_key(int vt_key, int mod) {
     VTermKey key = to_vterm_key(vt_key);
     if (key == VTERM_KEY_NONE) return;
     vterm_keyboard_key(vt_, key, static_cast<VTermModifier>(mod));
+}
+
+void VTScreen::keyboard_start_paste() {
+    if (vt_) vterm_keyboard_start_paste(vt_);
+}
+
+void VTScreen::keyboard_end_paste() {
+    if (vt_) vterm_keyboard_end_paste(vt_);
+}
+
+void VTScreen::_on_termprop_cursor_blink(bool blink) {
+    cursor_blink_ = blink;
+    dirty_ = true;
+}
+
+void VTScreen::_on_termprop_cursor_shape(int shape) {
+    if (shape < VT_CURSOR_BLOCK || shape > VT_CURSOR_BAR) {
+        shape = VT_CURSOR_BLOCK;
+    }
+    cursor_shape_ = shape;
+    dirty_ = true;
 }
 
 void VTScreen::take_output(std::vector<char> &out) {

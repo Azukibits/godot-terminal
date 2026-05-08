@@ -36,6 +36,13 @@ enum VTMod : int {
     VT_MOD_CTRL  = 0x04,
 };
 
+// Cursor shapes mirroring VTERM_PROP_CURSORSHAPE_*.
+enum VTCursorShape : int {
+    VT_CURSOR_BLOCK = 1,
+    VT_CURSOR_UNDERLINE = 2,
+    VT_CURSOR_BAR = 3,
+};
+
 // Mirror of libvterm's VTermKey for the supported special keys. Function
 // keys are VT_KEY_F1 + (n - 1) for n=1..12.
 enum VTKey : int {
@@ -84,6 +91,8 @@ public:
 
     Vector2i cursor() const { return cursor_; }
     bool cursor_visible() const { return cursor_visible_; }
+    bool cursor_blink() const { return cursor_blink_; }
+    int cursor_shape() const { return cursor_shape_; } // VTCursorShape
 
     // Used when a cell has DEFAULT_FG/DEFAULT_BG flags.
     void set_default_colors(const Color &fg, const Color &bg);
@@ -96,6 +105,11 @@ public:
     // and forward to the child process's stdin.
     void keyboard_unichar(uint32_t codepoint, int mod);
     void keyboard_key(int vt_key, int mod);
+
+    // Bracket a paste so libvterm emits ESC[200~ ... ESC[201~ when the
+    // child has bracketed-paste mode enabled, and nothing otherwise.
+    void keyboard_start_paste();
+    void keyboard_end_paste();
 
     // Drain any bytes libvterm produced (response to keyboard input or to
     // OSC queries from the child). Swaps into `out` and clears the buffer.
@@ -117,6 +131,8 @@ public:
     void _on_movecursor(int x, int y, bool visible);
     void _on_resize(int cols, int rows);
     void _on_output(const char *bytes, std::size_t len);
+    void _on_termprop_cursor_blink(bool blink);
+    void _on_termprop_cursor_shape(int shape);
     void _save_scrollback_line(std::vector<VTRenderCell> &&line);
     // Called by the sb_pushline trampoline. cells_blob is a
     // const VTermScreenCell*, kept opaque to avoid pulling vterm.h into
@@ -131,6 +147,8 @@ private:
 
     Vector2i cursor_{0, 0};
     bool cursor_visible_ = true;
+    bool cursor_blink_ = true;
+    int cursor_shape_ = VT_CURSOR_BLOCK;
     bool dirty_ = true;
 
     Color default_fg_ = Color(0.88f, 0.88f, 0.88f);

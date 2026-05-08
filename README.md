@@ -34,6 +34,10 @@ context switch:
   (`cmd.exe`, `powershell.exe`, `claude-code`, `codex`, …)
 - Full keyboard support: arrows, `F1`–`F12`, `Ctrl/Alt` combos, `Tab`,
   `Esc`, `Backspace`, function keys
+- **Blinking cursor** with shapes driven by `DECSCUSR` (block / underline /
+  bar); hollow when the terminal isn't focused
+- **Mouse selection** with click-and-drag; **Ctrl+Shift+C** copies, **Ctrl+Shift+V**
+  pastes (bracketed-paste aware); middle-click also pastes
 - 5000-line **scrollback** with mouse-wheel navigation; key input
   auto-snaps to the live view
 - Mouse wheel scrolling; **Shift+wheel** scrolls a page
@@ -206,20 +210,20 @@ Selected API (see [`src/terminal.h`](src/terminal.h) for the full set):
 
 ## Status / roadmap
 
-What works today (`v0.1.0`):
+What works today (`v0.2.0`):
 
 - [x] GDExtension scaffolding, Godot 4.3+ load
 - [x] libvterm-driven cell rendering with full color/style data plumbed
 - [x] ConPTY child process spawn + bidirectional I/O
 - [x] Keyboard input mapping (arrows, F-keys, Ctrl/Alt, etc.)
+- [x] Cursor blink + shape (block / underline / bar) via `DECSCUSR`
+- [x] Mouse selection + Ctrl+Shift+C/V copy/paste (bracketed-paste aware)
 - [x] Scrollback (5000 lines, mouse-wheel)
 - [x] Shell `cwd` defaults to the open Godot project root
 
 Planned next:
 
-- [ ] Cursor blink + shape (block / bar / underline)
 - [ ] Mouse-button forwarding to TUI apps (xterm mouse modes)
-- [ ] Selection + clipboard copy/paste
 - [ ] Auto-resize when the panel size changes (cols/rows from cell math)
 - [ ] Bold / italic / underline glyph rendering (data already piped through)
 - [ ] `claude-code` / `codex` compatibility pass — fix bugs surfaced

@@ -30,6 +30,9 @@ REPL 等，可以像在 Windows Terminal 中一样运行。
   （`cmd.exe`、`powershell.exe`、`claude-code`、`codex` 等）
 - 完整键盘支持：方向键、`F1`–`F12`、`Ctrl/Alt` 组合键、`Tab`、
   `Esc`、`Backspace`、功能键
+- **光标闪烁与形状**，由 `DECSCUSR` 控制（方块 / 下划线 / 竖线）；失去焦点时显示为空心方框
+- **鼠标拖选 + 剪贴板**：拖动鼠标选中文本，**Ctrl+Shift+C** 复制、
+  **Ctrl+Shift+V** 粘贴（兼容 bracketed paste）；中键也可粘贴
 - 5000 行 **scrollback** 历史滚动，支持鼠标滚轮导航；键盘输入会自动回到底部实时视图
 - 鼠标滚轮滚动；**Shift+滚轮** 按页滚动
 - Shell 默认从当前打开的 **Godot 项目目录** 启动，
@@ -211,20 +214,20 @@ term.process_exited.connect(func(code): print("exited: ", code))
 
 ## 状态 / 路线图
 
-当前已完成，`v0.1.0`：
+当前已完成，`v0.2.0`：
 
 - [x] GDExtension 框架，可在 Godot 4.3+ 加载
 - [x] 基于 libvterm 的字符单元渲染，颜色和样式数据已打通
 - [x] ConPTY 子进程启动和双向 I/O
 - [x] 键盘输入映射，方向键、功能键、Ctrl/Alt 等
+- [x] 光标闪烁与形状（方块 / 下划线 / 竖线），由 `DECSCUSR` 驱动
+- [x] 鼠标拖选 + Ctrl+Shift+C/V 复制粘贴（兼容 bracketed paste）
 - [x] Scrollback 历史滚动，5000 行，支持鼠标滚轮
 - [x] Shell 的 `cwd` 默认设置为当前打开的 Godot 项目根目录
 
 计划中的功能：
 
-- [ ] 光标闪烁和形状，方块 / 竖线 / 下划线
 - [ ] 将鼠标按键转发给 TUI 应用，xterm mouse modes
-- [ ] 选择文本和剪贴板复制 / 粘贴
 - [ ] 面板尺寸变化时自动调整终端列数和行数
 - [ ] 粗体 / 斜体 / 下划线字形渲染，数据已经接入
 - [ ] `claude-code` / `codex` 兼容性专项处理，修复复杂 TUI 渲染暴露的问题
