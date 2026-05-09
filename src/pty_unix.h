@@ -1,26 +1,26 @@
 #pragma once
 
-#ifdef _WIN32
+#ifndef _WIN32
 
 #include "pty.h"
 
 #include <atomic>
 #include <cstddef>
-#include <cstdint>
 #include <mutex>
 #include <thread>
 
 namespace godot {
 
-// ConPTY-backed IPty implementation. Win32 handles are stored as void* so
-// <windows.h> stays out of this header.
-class PtyWindows final : public IPty {
+// forkpty + execvp backed IPty implementation.
+// Child stdin/stdout/stderr are wired to the pty slave; the master fd is
+// kept here and read on a worker thread.
+class PtyUnix final : public IPty {
 public:
-    PtyWindows();
-    ~PtyWindows() override;
+    PtyUnix();
+    ~PtyUnix() override;
 
-    PtyWindows(const PtyWindows &) = delete;
-    PtyWindows &operator=(const PtyWindows &) = delete;
+    PtyUnix(const PtyUnix &) = delete;
+    PtyUnix &operator=(const PtyUnix &) = delete;
 
     bool start(const std::string &exe,
                const std::vector<std::string> &args,
@@ -36,12 +36,8 @@ public:
     void drain(const DrainFn &cb) override;
 
 private:
-    // Opaque handles — actually HPCON / HANDLE.
-    void *h_pc_ = nullptr;
-    void *h_in_write_ = nullptr;     // child stdin pipe, write end
-    void *h_out_read_ = nullptr;     // child stdout pipe, read end
-    void *h_proc_ = nullptr;         // child process
-    void *h_thread_handle_ = nullptr;// child main thread
+    int master_fd_ = -1;
+    int child_pid_ = -1;
 
     std::thread reader_;
     std::mutex buf_mu_;
@@ -52,9 +48,9 @@ private:
     int exit_code_ = 0;
 
     void _reader_loop();
-    void _close_handles();
+    void _close_master();
 };
 
 } // namespace godot
 
-#endif // _WIN32
+#endif // !_WIN32

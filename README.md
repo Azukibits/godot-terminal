@@ -6,9 +6,10 @@
 > `codex`, or any TUI program without leaving the engine.
 
 A C++ GDExtension for Godot 4.3+ that adds a **Terminal** tab to the editor's
-bottom panel. Built on Windows ConPTY + libvterm, so any modern command-line
+bottom panel. Built on libvterm with native PTY backends per platform
+(ConPTY on Windows, `forkpty` on macOS/Linux), so any modern command-line
 tool (vim-style apps, AI coding assistants, build watchers, REPLs) works the
-same as it would in Windows Terminal.
+same as it would in your usual terminal emulator.
 
 please always use the latest version 
 More features will be added
@@ -28,34 +29,42 @@ context switch:
 ## Features
 
 - Real ANSI/xterm terminal emulator powered by **libvterm 0.3.3**
-  (truecolor, 256-color, indexed palette, bold/italic/underline,
-  alt-screen, mouse-aware programs)
-- Spawns child processes via Windows **ConPTY**
-  (`cmd.exe`, `powershell.exe`, `claude-code`, `codex`, …)
+  (truecolor, 256-color, indexed palette, alt-screen, mouse-aware programs)
+- **Cross-platform PTY**: Windows ConPTY, macOS / Linux `forkpty`
+- Spawns child processes (`cmd.exe`, `powershell.exe`, `bash`, `zsh`,
+  `claude-code`, `codex`, …)
+- **Auto-resize**: cols/rows recompute from the panel's current pixel
+  size, and the resize is forwarded to the child process so TUI apps
+  reflow correctly
 - Full keyboard support: arrows, `F1`–`F12`, `Ctrl/Alt` combos, `Tab`,
   `Esc`, `Backspace`, function keys
+- **Glyph styles**: bold (synthetic), underline, strikethrough rendered
+  per-cell from libvterm SGR attrs
 - **Blinking cursor** with shapes driven by `DECSCUSR` (block / underline /
   bar); hollow when the terminal isn't focused
-- **Mouse selection** with click-and-drag; **Ctrl+Shift+C** copies, **Ctrl+Shift+V**
-  pastes (bracketed-paste aware); middle-click also pastes
+- **Mouse selection** with click-and-drag; **Ctrl+Shift+C** copies,
+  **Ctrl+Shift+V** pastes (bracketed-paste aware); middle-click also pastes
 - 5000-line **scrollback** with mouse-wheel navigation; key input
   auto-snaps to the live view
 - Mouse wheel scrolling; **Shift+wheel** scrolls a page
 - Shells start in your **open Godot project's directory** by default,
   so AI coding tools see the right codebase
-- No runtime dependencies beyond a Godot 4.3+ editor and a Win10 1809+ host
 
 ## Requirements
 
-- **Windows 10 1809+** (ConPTY API)
 - **Godot 4.3+**
-
-macOS / Linux are on the roadmap.
+- One of:
+  - **Windows 10 1809+** (ConPTY API)
+  - **macOS 11+** (universal binary, x86_64 + arm64)
+  - **Linux** (x86_64, glibc — uses `forkpty` from `libutil`)
 
 ## Quick install (recommended)
 
-1. Grab the latest **`godot_terminal-vX.Y.Z-win64.zip`** from the
-   [Releases page](https://github.com/Azukibits/godot-terminal/releases).
+1. From the [Releases page](https://github.com/Azukibits/godot-terminal/releases),
+   grab the zip for your platform:
+   - Windows: `godot_terminal-vX.Y.Z-win64.zip`
+   - macOS:   `godot_terminal-vX.Y.Z-macos-universal.zip`
+   - Linux:   `godot_terminal-vX.Y.Z-linux-x86_64.zip`
 2. Extract it. Copy the `godot_terminal/` folder it contains into your
    Godot project's `addons/` directory, so you end up with
    `your_project/addons/godot_terminal/`.
@@ -153,24 +162,37 @@ Then extract it again into your project's `addons/` folder.
 ## Build from source
 
 For developers who want to hack on the plugin or build for an
-unreleased Godot/Windows combination.
+unreleased Godot version.
 
-Prerequisites:
+Prerequisites (all platforms):
 
-- Visual Studio 2019/2022 with the *Desktop development with C++* workload
 - Python 3.8+
 - SCons 4.x (`pip install scons`)
+- A C++17 toolchain:
+  - **Windows**: Visual Studio 2019/2022 with *Desktop development with C++*
+  - **macOS**: Xcode command-line tools (`xcode-select --install`)
+  - **Linux**: `gcc` / `clang` and the system's `libutil` headers (usually
+    bundled with glibc)
 
 ```sh
 git clone --recurse-submodules https://github.com/Azukibits/godot-terminal.git
 cd godot-terminal
+
+# Windows
 scons platform=windows target=template_release arch=x86_64
+
+# macOS (universal: x86_64 + arm64)
+scons platform=macos target=template_release arch=universal
+
+# Linux
+scons platform=linux target=template_release arch=x86_64
 ```
 
-The DLL is written into `demo/addons/godot_terminal/bin/`. Open `demo/`
-in Godot 4.3+ to test against the bundled demo project. SCons normally
-locates MSVC automatically via `vswhere`; if it can't, run from a
-*Developer Command Prompt for VS* (or after `vcvarsall.bat amd64`).
+The library is written into `demo/addons/godot_terminal/bin/`. Open
+`demo/` in Godot 4.3+ to test against the bundled demo project. On
+Windows SCons normally locates MSVC automatically via `vswhere`; if it
+can't, run from a *Developer Command Prompt for VS* (or after
+`vcvarsall.bat amd64`).
 
 ## Use from GDScript
 
@@ -179,16 +201,20 @@ You can also create one yourself at runtime:
 
 ```gdscript
 var term := Terminal.new()
-term.cols = 100
-term.rows = 30
 term.font_size = 14
+term.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+term.size_flags_vertical = Control.SIZE_EXPAND_FILL
 add_child(term)
 
 # Spawn a shell. Empty cwd = inherit; otherwise an absolute path.
-term.start_process("powershell.exe", [], "C:/path/to/your/project")
+# Pick the binary appropriate for the host OS.
+match OS.get_name():
+    "Windows": term.start_process("powershell.exe", [], "C:/path/to/your/project")
+    "macOS":   term.start_process("/bin/zsh", ["-l"], "/path/to/your/project")
+    _:         term.start_process("/bin/bash", ["-l"], "/path/to/your/project")
 
 # Pipe text directly to the child's stdin.
-term.send_input("Get-Process | Select -First 5\r\n")
+term.send_input("ls -la\n")
 
 # Connect to lifecycle signals.
 term.process_exited.connect(func(code): print("exited: ", code))
@@ -198,11 +224,11 @@ Selected API (see [`src/terminal.h`](src/terminal.h) for the full set):
 
 | Member | Purpose |
 |--------|---------|
-| `start_process(exe, args, cwd)` | Spawn a child via ConPTY |
+| `start_process(exe, args, cwd)` | Spawn a child attached to a new pty |
 | `stop_process()` | Kill the child and detach the PTY |
 | `send_input(text)` / `send_input_bytes(data)` | Write to child stdin |
 | `write_text(s)` / `write_bytes(b)` | Inject bytes directly into the VT parser (no PTY) |
-| `cols` / `rows` | Cell-grid size; resizing also resizes the ConPTY |
+| `cols` / `rows` | Cell-grid size; auto-recomputed from the Control's size |
 | `font` / `font_size` | Use a `SystemFont` or `FontFile`; monospace recommended |
 | `scroll_to_bottom()` / `scroll_by(n)` / `clear_scrollback()` | Scrollback view controls |
 | `set_max_scrollback(n)` | Default 5000 lines |
@@ -210,11 +236,13 @@ Selected API (see [`src/terminal.h`](src/terminal.h) for the full set):
 
 ## Status / roadmap
 
-What works today (`v0.2.0`):
+What works today (`v0.3.0`):
 
 - [x] GDExtension scaffolding, Godot 4.3+ load
 - [x] libvterm-driven cell rendering with full color/style data plumbed
-- [x] ConPTY child process spawn + bidirectional I/O
+- [x] Cross-platform PTY: Windows ConPTY, macOS / Linux `forkpty`
+- [x] Auto-resize cols/rows from the Control's pixel size; forwarded to child
+- [x] Bold (synthetic), underline, strikethrough glyph rendering
 - [x] Keyboard input mapping (arrows, F-keys, Ctrl/Alt, etc.)
 - [x] Cursor blink + shape (block / underline / bar) via `DECSCUSR`
 - [x] Mouse selection + Ctrl+Shift+C/V copy/paste (bracketed-paste aware)
@@ -224,11 +252,10 @@ What works today (`v0.2.0`):
 Planned next:
 
 - [ ] Mouse-button forwarding to TUI apps (xterm mouse modes)
-- [ ] Auto-resize when the panel size changes (cols/rows from cell math)
-- [ ] Bold / italic / underline glyph rendering (data already piped through)
+- [ ] Italic glyph rendering (needs an italic FontFile or canvas shear)
+- [ ] OSC 0 / 2 window-title plumbed to a `title_changed` signal
 - [ ] `claude-code` / `codex` compatibility pass — fix bugs surfaced
   by their richer TUI rendering
-- [ ] macOS + Linux backends (`forkpty` / `posix_openpt`)
 
 ## License
 

@@ -26,6 +26,10 @@ func _enter_tree() -> void:
 		"Cascadia Mono",
 		"Cascadia Code",
 		"Consolas",
+		"Menlo",
+		"SF Mono",
+		"DejaVu Sans Mono",
+		"Liberation Mono",
 		"Courier New",
 		"monospace",
 	])
@@ -47,6 +51,23 @@ func _exit_tree() -> void:
 		_terminal.queue_free()
 		_terminal = null
 
+# Pick a shell appropriate for the host OS. On Unix, $SHELL is preferred so
+# users get whatever they configured (zsh, fish, ...).
+func _default_shell() -> Dictionary:
+	var os_name: String = OS.get_name()
+	if os_name == "Windows":
+		return {"exe": "cmd.exe", "args": PackedStringArray()}
+
+	var sh: String = OS.get_environment("SHELL")
+	if sh.is_empty():
+		# macOS defaults to /bin/zsh since Catalina; Linux varies but bash is
+		# almost always present.
+		sh = "/bin/zsh" if os_name == "macOS" else "/bin/bash"
+
+	# -l makes the shell read login dotfiles so PATH includes Homebrew /
+	# user-installed CLIs. Harmless if the shell ignores it.
+	return {"exe": sh, "args": PackedStringArray(["-l"])}
+
 func _spawn_default_shell() -> void:
 	if _terminal == null:
 		return
@@ -54,10 +75,11 @@ func _spawn_default_shell() -> void:
 	# (claude-code, codex, ...) inspect that project — not the host editor's
 	# parent process directory.
 	var project_cwd: String = ProjectSettings.globalize_path("res://")
-	print("[godot_terminal] spawning cmd.exe with cwd=", project_cwd)
-	var ok: bool = _terminal.start_process("cmd.exe", PackedStringArray(), project_cwd)
+	var shell: Dictionary = _default_shell()
+	print("[godot_terminal] spawning ", shell.exe, " with cwd=", project_cwd)
+	var ok: bool = _terminal.start_process(shell.exe, shell.args, project_cwd)
 	if not ok:
-		push_error("[godot_terminal] cmd.exe failed to start")
+		push_error("[godot_terminal] ", shell.exe, " failed to start")
 		return
 	_terminal.grab_focus()
 

@@ -7,3 +7,9 @@ compatibility_minimum = "4.3"
 
 windows.debug.x86_64 = "res://addons/godot_terminal/bin/godot_terminal.windows.template_debug.x86_64.dll"
 windows.release.x86_64 = "res://addons/godot_terminal/bin/godot_terminal.windows.template_release.x86_64.dll"
+
+linux.debug.x86_64 = "res://addons/godot_terminal/bin/libgodot_terminal.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://addons/godot_terminal/bin/libgodot_terminal.linux.template_release.x86_64.so"
+
+macos.debug = "res://addons/godot_terminal/bin/libgodot_terminal.macos.template_debug.universal.dylib"
+macos.release = "res://addons/godot_terminal/bin/libgodot_terminal.macos.template_release.universal.dylib"

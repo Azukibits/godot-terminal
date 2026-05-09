@@ -23,6 +23,7 @@ struct VTRenderCell {
     bool bold = false;
     bool italic = false;
     bool underline = false; // any underline style
+    bool strikethrough = false;
     bool reverse_video = false;
     int width = 1;          // 1 normal, 2 wide. (width-0 right-half is skipped.)
 };

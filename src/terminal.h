@@ -12,9 +12,7 @@
 namespace godot {
 
 class VTScreen;
-#ifdef _WIN32
-class PtyWindows;
-#endif
+class IPty;
 
 class Terminal : public Control {
     GDCLASS(Terminal, Control)
@@ -112,14 +110,16 @@ private:
     bool sel_dragging_ = false;
 
     std::unique_ptr<VTScreen> vt_;
-#ifdef _WIN32
-    std::unique_ptr<PtyWindows> pty_;
-#endif
+    std::unique_ptr<IPty> pty_;
 
     Ref<Font> _resolve_font() const;
     void _measure_cell();
     void _ensure_vt();
     void _redraw_soon();
+
+    // Recompute cols/rows from the current Control size and cell_size_,
+    // forwarding the new grid to vt_ and pty_. No-op if sizes are zero.
+    void _auto_resize_grid();
 
     void _on_draw();
     void _on_process();

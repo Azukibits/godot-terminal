@@ -56,6 +56,7 @@ inline void convert_cell(const VTermScreenCell &c, const VTermScreen *screen,
     out.bold = c.attrs.bold != 0;
     out.italic = c.attrs.italic != 0;
     out.underline = c.attrs.underline != 0;
+    out.strikethrough = c.attrs.strike != 0;
     out.reverse_video = c.attrs.reverse != 0;
 
     Color fg = color_from_vterm(c.fg, screen, default_fg, default_bg, true);

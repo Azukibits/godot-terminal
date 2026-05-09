@@ -6,9 +6,10 @@
 > `cmd.exe`、`claude-code`、`codex` 或任何 TUI 命令行程序。
 
 这是一个适用于 Godot 4.3+ 的 C++ GDExtension 插件。它会在 Godot 编辑器
-底部面板中添加一个 **Terminal** 标签页。插件基于 Windows ConPTY 和
-libvterm 实现，因此现代命令行工具，例如类 vim 程序、AI 编程助手、构建监听器、
-REPL 等，可以像在 Windows Terminal 中一样运行。
+底部面板中添加一个 **Terminal** 标签页。插件基于 libvterm，并为每个平台
+配套了原生 PTY 后端（Windows 用 ConPTY，macOS / Linux 用 `forkpty`），
+因此现代命令行工具，例如类 vim 程序、AI 编程助手、构建监听器、REPL 等,
+可以像在你常用的终端里一样运行。
 
 `Terminal` 类本身也是一个普通的 `Control` 节点，因此你也可以把它放进运行时场景中，
 用来实现游戏内控制台或调试终端。
@@ -24,12 +25,16 @@ REPL 等，可以像在 Windows Terminal 中一样运行。
 ## 功能特性
 
 - 基于 **libvterm 0.3.3** 的真实 ANSI/xterm 终端模拟器
-  （支持 truecolor、256 色、索引调色板、粗体、斜体、下划线、
-  alt-screen、支持鼠标感知的程序）
-- 通过 Windows **ConPTY** 启动子进程
-  （`cmd.exe`、`powershell.exe`、`claude-code`、`codex` 等）
+  （支持 truecolor、256 色、索引调色板、alt-screen、支持鼠标感知的程序）
+- **跨平台 PTY**：Windows 用 ConPTY，macOS / Linux 用 `forkpty`
+- 启动子进程（`cmd.exe`、`powershell.exe`、`bash`、`zsh`、
+  `claude-code`、`codex` 等）
+- **自动 resize**：列数 / 行数会按面板当前像素尺寸重新计算，
+  并把新的尺寸转发给子进程，TUI 应用可以正确 reflow
 - 完整键盘支持：方向键、`F1`–`F12`、`Ctrl/Alt` 组合键、`Tab`、
   `Esc`、`Backspace`、功能键
+- **字形样式**：粗体（合成）、下划线、删除线 —— 按 cell 从 libvterm
+  SGR 属性渲染
 - **光标闪烁与形状**，由 `DECSCUSR` 控制（方块 / 下划线 / 竖线）；失去焦点时显示为空心方框
 - **鼠标拖选 + 剪贴板**：拖动鼠标选中文本，**Ctrl+Shift+C** 复制、
   **Ctrl+Shift+V** 粘贴（兼容 bracketed paste）；中键也可粘贴
@@ -37,19 +42,22 @@ REPL 等，可以像在 Windows Terminal 中一样运行。
 - 鼠标滚轮滚动；**Shift+滚轮** 按页滚动
 - Shell 默认从当前打开的 **Godot 项目目录** 启动，
   因此 AI 编程工具可以直接看到正确的代码库
-- 除 Godot 4.3+ 编辑器和 Windows 10 1809+ 主机外，无额外运行时依赖
 
 ## 系统要求
 
-- **Windows 10 1809+**，需要 ConPTY API
 - **Godot 4.3+**
-
-macOS / Linux 支持在路线图中。
+- 以下任一平台：
+  - **Windows 10 1809+**（ConPTY API）
+  - **macOS 11+**（universal binary，x86_64 + arm64）
+  - **Linux**（x86_64，glibc，使用 `libutil` 提供的 `forkpty`）
 
 ## 快速安装，推荐方式
 
 1. 从 [Releases 页面](https://github.com/Azukibits/godot-terminal/releases)
-   下载最新的 **`godot_terminal-vX.Y.Z-win64.zip`**。
+   下载对应平台的压缩包：
+   - Windows：`godot_terminal-vX.Y.Z-win64.zip`
+   - macOS：`godot_terminal-vX.Y.Z-macos-universal.zip`
+   - Linux：`godot_terminal-vX.Y.Z-linux-x86_64.zip`
 2. 解压压缩包。将其中的 `godot_terminal/` 文件夹复制到你的 Godot 项目的
    `addons/` 目录中，最终路径应该是：
    `your_project/addons/godot_terminal/`。
@@ -147,21 +155,32 @@ Unblock-File -Path "C:\path\to\godot_terminal-vX.Y.Z-win64.zip"
 
 ## 从源码构建
 
-适合想要修改插件，或者为尚未发布的 Godot / Windows 组合自行构建的开发者。
+适合想要修改插件，或者为尚未发布的 Godot 版本自行构建的开发者。
 
-前置要求：
+前置要求（所有平台共用）：
 
-- Visual Studio 2019/2022，并安装 *Desktop development with C++* 工作负载
 - Python 3.8+
 - SCons 4.x，安装命令：`pip install scons`
+- C++17 工具链：
+  - **Windows**：Visual Studio 2019/2022，并安装 *Desktop development with C++* 工作负载
+  - **macOS**：Xcode 命令行工具（`xcode-select --install`）
+  - **Linux**：`gcc` / `clang`，以及系统的 `libutil` 头文件（一般随 glibc 安装）
 
 ```sh
 git clone --recurse-submodules https://github.com/Azukibits/godot-terminal.git
 cd godot-terminal
+
+# Windows
 scons platform=windows target=template_release arch=x86_64
+
+# macOS（universal：x86_64 + arm64）
+scons platform=macos target=template_release arch=universal
+
+# Linux
+scons platform=linux target=template_release arch=x86_64
 ```
 
-构建生成的 DLL 会写入：
+构建生成的库文件会写入：
 
 ```text
 demo/addons/godot_terminal/bin/
@@ -169,8 +188,8 @@ demo/addons/godot_terminal/bin/
 
 用 Godot 4.3+ 打开 `demo/` 即可测试内置 demo 项目。
 
-SCons 通常会通过 `vswhere` 自动定位 MSVC。如果定位失败，请从
-*Developer Command Prompt for VS* 运行构建命令，或者先执行：
+在 Windows 上 SCons 通常会通过 `vswhere` 自动定位 MSVC。如果定位失败，
+请从 *Developer Command Prompt for VS* 运行构建命令，或者先执行：
 
 ```bat
 vcvarsall.bat amd64
@@ -183,16 +202,20 @@ vcvarsall.bat amd64
 
 ```gdscript
 var term := Terminal.new()
-term.cols = 100
-term.rows = 30
 term.font_size = 14
+term.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+term.size_flags_vertical = Control.SIZE_EXPAND_FILL
 add_child(term)
 
 # 启动一个 shell。cwd 为空表示继承当前目录；否则传入绝对路径。
-term.start_process("powershell.exe", [], "C:/path/to/your/project")
+# 根据当前 OS 选择对应的二进制。
+match OS.get_name():
+    "Windows": term.start_process("powershell.exe", [], "C:/path/to/your/project")
+    "macOS":   term.start_process("/bin/zsh", ["-l"], "/path/to/your/project")
+    _:         term.start_process("/bin/bash", ["-l"], "/path/to/your/project")
 
 # 直接向子进程 stdin 写入文本。
-term.send_input("Get-Process | Select -First 5\r\n")
+term.send_input("ls -la\n")
 
 # 连接进程生命周期信号。
 term.process_exited.connect(func(code): print("exited: ", code))
@@ -202,11 +225,11 @@ term.process_exited.connect(func(code): print("exited: ", code))
 
 | 成员 | 用途 |
 |------|------|
-| `start_process(exe, args, cwd)` | 通过 ConPTY 启动子进程 |
+| `start_process(exe, args, cwd)` | 启动一个子进程并挂接到新建的 pty |
 | `stop_process()` | 终止子进程并断开 PTY |
 | `send_input(text)` / `send_input_bytes(data)` | 写入子进程 stdin |
 | `write_text(s)` / `write_bytes(b)` | 直接向 VT 解析器注入字节，不经过 PTY |
-| `cols` / `rows` | 终端字符网格大小；调整时也会调整 ConPTY 尺寸 |
+| `cols` / `rows` | 终端字符网格大小；会按 Control 的尺寸自动重算 |
 | `font` / `font_size` | 使用 `SystemFont` 或 `FontFile`；推荐使用等宽字体 |
 | `scroll_to_bottom()` / `scroll_by(n)` / `clear_scrollback()` | 历史滚动视图控制 |
 | `set_max_scrollback(n)` | 设置最大历史行数，默认 5000 行 |
@@ -214,11 +237,13 @@ term.process_exited.connect(func(code): print("exited: ", code))
 
 ## 状态 / 路线图
 
-当前已完成，`v0.2.0`：
+当前已完成，`v0.3.0`：
 
 - [x] GDExtension 框架，可在 Godot 4.3+ 加载
 - [x] 基于 libvterm 的字符单元渲染，颜色和样式数据已打通
-- [x] ConPTY 子进程启动和双向 I/O
+- [x] 跨平台 PTY：Windows ConPTY、macOS / Linux `forkpty`
+- [x] 按 Control 像素尺寸自动重算列数 / 行数，并转发给子进程
+- [x] 粗体（合成）、下划线、删除线字形渲染
 - [x] 键盘输入映射，方向键、功能键、Ctrl/Alt 等
 - [x] 光标闪烁与形状（方块 / 下划线 / 竖线），由 `DECSCUSR` 驱动
 - [x] 鼠标拖选 + Ctrl+Shift+C/V 复制粘贴（兼容 bracketed paste）
@@ -228,10 +253,9 @@ term.process_exited.connect(func(code): print("exited: ", code))
 计划中的功能：
 
 - [ ] 将鼠标按键转发给 TUI 应用，xterm mouse modes
-- [ ] 面板尺寸变化时自动调整终端列数和行数
-- [ ] 粗体 / 斜体 / 下划线字形渲染，数据已经接入
+- [ ] 斜体字形渲染（需要额外的 italic 字体或 canvas shear）
+- [ ] OSC 0 / 2 窗口标题打通到 `title_changed` 信号
 - [ ] `claude-code` / `codex` 兼容性专项处理，修复复杂 TUI 渲染暴露的问题
-- [ ] macOS + Linux 后端，`forkpty` / `posix_openpt`
 
 ## 许可证
 

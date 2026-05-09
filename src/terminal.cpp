@@ -1,9 +1,6 @@
 #include "terminal.h"
+#include "pty.h"
 #include "vt_screen.h"
-
-#ifdef _WIN32
-#include "pty_windows.h"
-#endif
 
 #include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/classes/global_constants.hpp>
@@ -26,35 +23,10 @@ namespace godot {
 
 namespace {
 
-#ifdef _WIN32
-// Build a single Win32 command-line string by quoting each token if it
-// contains whitespace. The first token is the executable.
-std::wstring build_command_line(const String &exe, const PackedStringArray &args) {
-    auto to_w = [](const String &s) -> std::wstring {
-        Char16String u = s.utf16();
-        return std::wstring(reinterpret_cast<const wchar_t *>(u.get_data()),
-                            static_cast<size_t>(u.length()));
-    };
-    auto quote = [](const std::wstring &s) -> std::wstring {
-        if (s.find_first_of(L" \t\"") == std::wstring::npos) return s;
-        std::wstring out;
-        out.reserve(s.size() + 2);
-        out.push_back(L'"');
-        for (wchar_t c : s) {
-            if (c == L'"') out.push_back(L'\\');
-            out.push_back(c);
-        }
-        out.push_back(L'"');
-        return out;
-    };
-    std::wstring cmd = quote(to_w(exe));
-    for (int i = 0; i < args.size(); i++) {
-        cmd.push_back(L' ');
-        cmd.append(quote(to_w(args[i])));
-    }
-    return cmd;
+inline std::string to_utf8(const String &s) {
+    CharString u = s.utf8();
+    return std::string(u.get_data(), static_cast<size_t>(u.length()));
 }
-#endif
 
 // Map a Godot Key keycode to a VTKey value. Returns VT_KEY_NONE for keys
 // not classified as "special"; the caller should fall back to unichar
@@ -149,13 +121,16 @@ void Terminal::_notification(int p_what) {
             _ensure_vt();
             set_focus_mode(Control::FOCUS_ALL);
             set_process(true); // drain PTY every frame
+            _auto_resize_grid();
             _redraw_soon();
         } break;
         case NOTIFICATION_THEME_CHANGED: {
             _measure_cell();
+            _auto_resize_grid();
             _redraw_soon();
         } break;
         case NOTIFICATION_RESIZED: {
+            _auto_resize_grid();
             _redraw_soon();
         } break;
         case NOTIFICATION_DRAW: {
@@ -178,6 +153,7 @@ void Terminal::set_font(const Ref<Font> &p_font) {
     if (font_ == p_font) return;
     font_ = p_font;
     _measure_cell();
+    _auto_resize_grid();
     _redraw_soon();
 }
 Ref<Font> Terminal::get_font() const { return font_; }
@@ -187,6 +163,7 @@ void Terminal::set_font_size(int p_size) {
     if (font_size_ == p_size) return;
     font_size_ = p_size;
     _measure_cell();
+    _auto_resize_grid();
     _redraw_soon();
 }
 int Terminal::get_font_size() const { return font_size_; }
@@ -196,9 +173,7 @@ void Terminal::set_cols(int p_cols) {
     if (cols_ == p_cols) return;
     cols_ = p_cols;
     if (vt_) vt_->resize(cols_, rows_);
-#ifdef _WIN32
     if (pty_) pty_->resize(cols_, rows_);
-#endif
     _redraw_soon();
 }
 int Terminal::get_cols() const { return cols_; }
@@ -208,9 +183,7 @@ void Terminal::set_rows(int p_rows) {
     if (rows_ == p_rows) return;
     rows_ = p_rows;
     if (vt_) vt_->resize(cols_, rows_);
-#ifdef _WIN32
     if (pty_) pty_->resize(cols_, rows_);
-#endif
     _redraw_soon();
 }
 int Terminal::get_rows() const { return rows_; }
@@ -253,65 +226,47 @@ void Terminal::write_text(const String &p_text) {
 bool Terminal::start_process(const String &p_executable,
                               const PackedStringArray &p_args,
                               const String &p_cwd) {
-#ifdef _WIN32
     if (!vt_) _ensure_vt();
     if (pty_ && pty_->is_running()) {
         UtilityFunctions::push_warning("godot_terminal: a process is already running; call stop_process() first.");
         return false;
     }
-    pty_ = std::make_unique<PtyWindows>();
-    std::wstring cmd = build_command_line(p_executable, p_args);
-    std::wstring cwd_w;
-    if (!p_cwd.is_empty()) {
-        Char16String u = p_cwd.utf16();
-        cwd_w.assign(reinterpret_cast<const wchar_t *>(u.get_data()),
-                     static_cast<size_t>(u.length()));
+    pty_ = make_pty();
+    std::vector<std::string> args;
+    args.reserve(p_args.size());
+    for (int i = 0; i < p_args.size(); i++) {
+        args.push_back(to_utf8(p_args[i]));
     }
-    if (!pty_->start(cmd, cols_, rows_, cwd_w)) {
+    if (!pty_->start(to_utf8(p_executable), args, cols_, rows_, to_utf8(p_cwd))) {
         UtilityFunctions::push_error("godot_terminal: failed to start: ", p_executable);
         pty_.reset();
         return false;
     }
     emit_signal("process_started");
     return true;
-#else
-    (void)p_cwd;
-    UtilityFunctions::push_error("godot_terminal: PTY only implemented on Windows so far.");
-    return false;
-#endif
 }
 
 void Terminal::stop_process() {
-#ifdef _WIN32
     if (pty_) {
         pty_->stop();
         pty_.reset();
     }
-#endif
 }
 
 bool Terminal::is_process_running() const {
-#ifdef _WIN32
     return pty_ != nullptr && pty_->is_running();
-#else
-    return false;
-#endif
 }
 
 void Terminal::send_input(const String &p_text) {
-#ifdef _WIN32
     if (!pty_) return;
     CharString utf8 = p_text.utf8();
     pty_->write(utf8.get_data(), static_cast<size_t>(utf8.length()));
-#endif
 }
 
 void Terminal::send_input_bytes(const PackedByteArray &p_data) {
-#ifdef _WIN32
     if (!pty_ || p_data.size() == 0) return;
     pty_->write(reinterpret_cast<const char *>(p_data.ptr()),
                 static_cast<size_t>(p_data.size()));
-#endif
 }
 
 // --- input ------------------------------------------------------------------
@@ -491,11 +446,9 @@ void Terminal::_flush_vt_output_to_pty() {
     std::vector<char> out;
     vt_->take_output(out);
     if (out.empty()) return;
-#ifdef _WIN32
     if (pty_) {
         pty_->write(out.data(), out.size());
     }
-#endif
 }
 
 // --- internals ---------------------------------------------------------------
@@ -530,6 +483,21 @@ void Terminal::_redraw_soon() {
     queue_redraw();
 }
 
+void Terminal::_auto_resize_grid() {
+    if (cell_size_.x <= 0 || cell_size_.y <= 0) return;
+    Vector2 size = get_size();
+    if (size.x <= 0 || size.y <= 0) return;
+
+    int new_cols = std::max(1, static_cast<int>(size.x / cell_size_.x));
+    int new_rows = std::max(1, static_cast<int>(size.y / cell_size_.y));
+    if (new_cols == cols_ && new_rows == rows_) return;
+
+    cols_ = new_cols;
+    rows_ = new_rows;
+    if (vt_) vt_->resize(cols_, rows_);
+    if (pty_) pty_->resize(cols_, rows_);
+}
+
 void Terminal::_on_process() {
     // Cursor blink: tick the phase every 530ms, repaint only on flips so
     // we're not requeuing a redraw every frame.
@@ -547,7 +515,6 @@ void Terminal::_on_process() {
         _redraw_soon();
     }
 
-#ifdef _WIN32
     if (!pty_) return;
 
     bool got_data = false;
@@ -573,7 +540,6 @@ void Terminal::_on_process() {
         emit_signal("process_exited", code);
         _redraw_soon();
     }
-#endif
 }
 
 void Terminal::_on_draw() {
@@ -616,17 +582,39 @@ void Terminal::_on_draw() {
         }
     }
 
-    // 2) Glyphs.
+    // 2) Glyphs + per-cell line decorations.
+    real_t underline_thick = std::max<real_t>(1.0f, cell_size_.y * 0.07f);
+    real_t strike_thick    = std::max<real_t>(1.0f, cell_size_.y * 0.06f);
     for (int y = 0; y < rows; y++) {
         real_t baseline_y = y * cell_size_.y + ascent;
         for (int x = 0; x < cols; x++) {
             VTRenderCell c;
             if (!read_at(x, y, c)) continue;
             if (c.width == 0) continue;
-            if (c.ch == U' ' || c.ch == 0) continue;
-            Vector2 baseline(x * cell_size_.x, baseline_y);
-            f->draw_char(get_canvas_item(), baseline, static_cast<int32_t>(c.ch),
-                         font_size_, c.fg);
+
+            real_t cell_w = cell_size_.x * (c.width > 0 ? c.width : 1);
+            real_t cell_x = x * cell_size_.x;
+
+            if (c.ch != U' ' && c.ch != 0) {
+                Vector2 baseline(cell_x, baseline_y);
+                f->draw_char(get_canvas_item(), baseline, static_cast<int32_t>(c.ch),
+                             font_size_, c.fg);
+                // Fake-bold: redraw at +1px x-offset for stroke weight. Cheaper
+                // than carrying a parallel bold FontFile resource.
+                if (c.bold) {
+                    f->draw_char(get_canvas_item(), baseline + Vector2(1, 0),
+                                 static_cast<int32_t>(c.ch), font_size_, c.fg);
+                }
+            }
+
+            if (c.underline) {
+                Vector2 pos(cell_x, baseline_y + std::max<real_t>(1.0f, cell_size_.y * 0.08f));
+                draw_rect(Rect2(pos, Vector2(cell_w, underline_thick)), c.fg);
+            }
+            if (c.strikethrough) {
+                Vector2 pos(cell_x, y * cell_size_.y + cell_size_.y * 0.55f);
+                draw_rect(Rect2(pos, Vector2(cell_w, strike_thick)), c.fg);
+            }
         }
     }
 

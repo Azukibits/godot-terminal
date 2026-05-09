@@ -9,20 +9,65 @@
 #include <windows.h>
 
 #include <cstring>
+#include <string>
 
 namespace godot {
 
 namespace {
+
 inline HANDLE H(void *p) { return reinterpret_cast<HANDLE>(p); }
 inline HPCON  P(void *p) { return reinterpret_cast<HPCON>(p); }
+
+// UTF-8 → UTF-16 via Win32. Empty input → empty output.
+std::wstring utf8_to_wide(const std::string &s) {
+    if (s.empty()) return std::wstring();
+    int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
+                                nullptr, 0);
+    if (n <= 0) return std::wstring();
+    std::wstring out(static_cast<size_t>(n), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
+                        out.data(), n);
+    return out;
+}
+
+// Build a single Win32 command-line string by quoting each token if it
+// contains whitespace or quotes. The first token is the executable.
+std::wstring build_command_line(const std::string &exe,
+                                const std::vector<std::string> &args) {
+    auto quote = [](const std::wstring &s) -> std::wstring {
+        if (s.find_first_of(L" \t\"") == std::wstring::npos) return s;
+        std::wstring out;
+        out.reserve(s.size() + 2);
+        out.push_back(L'"');
+        for (wchar_t c : s) {
+            if (c == L'"') out.push_back(L'\\');
+            out.push_back(c);
+        }
+        out.push_back(L'"');
+        return out;
+    };
+
+    std::wstring cmd = quote(utf8_to_wide(exe));
+    for (const std::string &a : args) {
+        cmd.push_back(L' ');
+        cmd.append(quote(utf8_to_wide(a)));
+    }
+    return cmd;
+}
+
 } // namespace
 
 PtyWindows::PtyWindows() = default;
 PtyWindows::~PtyWindows() { stop(); }
 
-bool PtyWindows::start(const std::wstring &command_line, int cols, int rows,
-                       const std::wstring &cwd) {
+bool PtyWindows::start(const std::string &exe,
+                       const std::vector<std::string> &args,
+                       int cols, int rows,
+                       const std::string &cwd) {
     if (running_.load()) return false;
+
+    std::wstring command_line = build_command_line(exe, args);
+    std::wstring cwd_w = utf8_to_wide(cwd);
 
     HANDLE hPipeIn = nullptr;       // child reads from this (handed to ConPTY)
     HANDLE hPipeInWrite = nullptr;  // host writes to this
@@ -86,12 +131,11 @@ bool PtyWindows::start(const std::wstring &command_line, int cols, int rows,
 
     PROCESS_INFORMATION pi = {};
     // CreateProcessW takes a writable command-line buffer.
-    std::wstring cmd = command_line;
-    LPCWSTR cwd_ptr = cwd.empty() ? nullptr : cwd.c_str();
+    LPCWSTR cwd_ptr = cwd_w.empty() ? nullptr : cwd_w.c_str();
 
     BOOL ok = CreateProcessW(
         /*lpApplicationName*/ nullptr,
-        /*lpCommandLine    */ cmd.empty() ? nullptr : cmd.data(),
+        /*lpCommandLine    */ command_line.empty() ? nullptr : command_line.data(),
         /*lpProcessAttrs   */ nullptr,
         /*lpThreadAttrs    */ nullptr,
         /*bInheritHandles  */ FALSE,
@@ -120,7 +164,6 @@ bool PtyWindows::start(const std::wstring &command_line, int cols, int rows,
     exit_code_ = 0;
     running_.store(true);
 
-    // Start the reader thread *after* all handles are stored.
     reader_ = std::thread([this]() { _reader_loop(); });
     return true;
 }
@@ -175,7 +218,6 @@ void PtyWindows::_reader_loop() {
         std::lock_guard<std::mutex> lk(buf_mu_);
         buf_.insert(buf_.end(), buf, buf + n);
     }
-    // Capture exit code before flagging exited_ so the two stay coherent.
     if (h_proc_ != nullptr) {
         DWORD code = 0;
         if (GetExitCodeProcess(H(h_proc_), &code) &&
@@ -213,6 +255,10 @@ void PtyWindows::drain(const DrainFn &cb) {
         local.swap(buf_);
     }
     cb(local.data(), local.size());
+}
+
+std::unique_ptr<IPty> make_pty() {
+    return std::unique_ptr<IPty>(new PtyWindows());
 }
 
 } // namespace godot
