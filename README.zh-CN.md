@@ -8,8 +8,10 @@
 这是一个适用于 Godot 4.3+ 的 C++ GDExtension 插件。它会在 Godot 编辑器
 底部面板中添加一个 **Terminal** 标签页。插件基于 libvterm，并为每个平台
 配套了原生 PTY 后端（Windows 用 ConPTY，macOS / Linux 用 `forkpty`），
-因此现代命令行工具，例如类 vim 程序、AI 编程助手、构建监听器、REPL 等,
+因此现代命令行工具，例如类 vim 程序、AI 编程助手、构建监听器、REPL 等，
 可以像在你常用的终端里一样运行。
+
+请始终使用最新版本。后续会继续加入更多功能。
 
 `Terminal` 类本身也是一个普通的 `Control` 节点，因此你也可以把它放进运行时场景中，
 用来实现游戏内控制台或调试终端。
@@ -68,6 +70,49 @@
    （在 *Output*、*Debugger*、*Audio* 附近）。点击该面板并聚焦后即可输入命令。
 
 ## 故障排查
+
+### macOS 下载后阻止 GDExtension dylib
+
+如果你是从下载的 `.zip` 压缩包安装插件，macOS Gatekeeper 可能会把其中的
+`.dylib` 文件或 `.framework` 标记为隔离状态。
+
+出现这种情况时，即使插件文件位置正确，Godot 也可能无法加载 GDExtension 库。
+
+插件目录在 Godot 项目中应该类似这样：
+
+```text
+your_project/
+└── addons/
+    └── godot_terminal/
+        └── bin/
+            ├── libgodot_terminal.macos.template_debug.framework/
+            └── libgodot_terminal.macos.template_release.framework/
+```
+
+要移除整个插件目录的 quarantine 隔离属性，请先关闭 Godot，然后运行下面的命令。
+请将路径替换成你的真实项目路径：
+
+```sh
+xattr -dr com.apple.quarantine ~/your_project/addons/godot_terminal
+```
+
+然后重新打开 Godot，并重新启用插件：
+
+```text
+Project → Project Settings → Plugins → godot_terminal
+```
+
+如果你还保留着原始下载的 `.zip` 文件，也可以先移除压缩包本身的 quarantine 隔离属性，
+然后再重新解压：
+
+```sh
+xattr -d com.apple.quarantine ~/Downloads/godot_terminal-vX.Y.Z-macos-universal.zip
+```
+
+然后重新解压到项目的 `addons/` 目录中。
+
+> 只应移除来自可信来源文件的 quarantine 隔离属性，例如本仓库官方 Releases 页面下载的文件，
+> 或者你自己从源码编译出来的文件。
 
 ### Windows 下载后阻止 GDExtension DLL
 
@@ -263,7 +308,7 @@ MIT — 见 [LICENSE](LICENSE)。
 
 内置第三方代码：
 
-- **[godot-cpp](https://github.com/godotengine/godot-cpp)** — MIT
-  ，Godot Engine 项目
+- **[godot-cpp](https://github.com/godotengine/godot-cpp)** — MIT，
+  Godot Engine 项目
 - **[libvterm 0.3.3](https://www.leonerd.org.uk/code/libvterm/)**，
   作者 Paul "LeoNerd" Evans — MIT，已 vendored 到 `thirdparty/libvterm/`
