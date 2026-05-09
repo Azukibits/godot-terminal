@@ -267,9 +267,3 @@ Bundled third-party code:
   (Godot Engine project)
 - **[libvterm 0.3.3](https://www.leonerd.org.uk/code/libvterm/)** by
   Paul "LeoNerd" Evans — MIT (vendored under `thirdparty/libvterm/`)
-
-## Acknowledgments
-
-This plugin exists because libvterm is good at being a terminal, ConPTY
-is good at faking one, and Godot exposes enough of its rendering API
-to a Control node that you can paint cells fast enough not to notice.
