@@ -49,8 +49,11 @@ if env["platform"] == "windows" and env.get("CC") == "cl":
     ])
 
 if env["platform"] == "linux":
-    # forkpty / openpty live in libutil on glibc systems.
+    # forkpty / openpty live in libutil on glibc systems, and their
+    # declaration in <pty.h> is only visible when one of _GNU_SOURCE /
+    # _DEFAULT_SOURCE / _BSD_SOURCE is in effect.
     env.Append(LIBS=["util"])
+    env.Append(CPPDEFINES=["_GNU_SOURCE"])
 
 # --- Output -------------------------------------------------------------------
 suffix = "{}.{}.{}".format(env["platform"], env["target"], env["arch"])

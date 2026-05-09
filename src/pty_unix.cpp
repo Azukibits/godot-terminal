@@ -1,5 +1,12 @@
 #ifndef _WIN32
 
+// glibc gates forkpty / openpty on _GNU_SOURCE / _DEFAULT_SOURCE; define
+// it before any header is parsed so the build doesn't depend on the
+// caller's CFLAGS.
+#if !defined(__APPLE__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE 1
+#endif
+
 #include "pty_unix.h"
 
 #if defined(__APPLE__)
