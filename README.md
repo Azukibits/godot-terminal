@@ -11,8 +11,7 @@ bottom panel. Built on libvterm with native PTY backends per platform
 tool (vim-style apps, AI coding assistants, build watchers, REPLs) works the
 same as it would in your usual terminal emulator.
 
-please always use the latest version 
-More features will be added
+Please always use the latest version. More features will be added.
 
 The `Terminal` class is also a regular `Control` node, so you can drop one
 into a runtime scene if you want an in-game console.
@@ -75,6 +74,51 @@ context switch:
    panel to focus, type away.
 
 ## Troubleshooting
+
+### macOS blocks the GDExtension dylib after downloading
+
+If you installed the plugin from a downloaded `.zip`, macOS Gatekeeper may
+mark the included `.dylib` files as quarantined.
+
+When this happens, Godot may fail to load the GDExtension library even though
+the files are in the correct location.
+
+The plugin folder should look like this inside your Godot project:
+
+```text
+your_project/
+└── addons/
+    └── godot_terminal/
+        └── bin/
+            ├── libgodot_terminal.macos.template_debug.framework/
+            └── libgodot_terminal.macos.template_release.framework/
+```
+
+To remove the quarantine attribute from the whole plugin folder, close Godot
+and run the following command. Replace the path with your real project path:
+
+```sh
+xattr -dr com.apple.quarantine ~/your_project/addons/godot_terminal
+```
+
+Then reopen Godot and enable the plugin again:
+
+```text
+Project → Project Settings → Plugins → godot_terminal
+```
+
+If you still have the original downloaded `.zip`, you can also remove the
+quarantine attribute from the zip before extracting it:
+
+```sh
+xattr -d com.apple.quarantine ~/Downloads/godot_terminal-vX.Y.Z-macos-universal.zip
+```
+
+Then extract it again into your project's `addons/` folder.
+
+> Only remove the quarantine attribute from files downloaded from a trusted
+> source, such as this repository's official Releases page, or files you built
+> yourself from source.
 
 ### Windows blocks the GDExtension DLL after downloading
 
