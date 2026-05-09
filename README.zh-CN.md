@@ -267,9 +267,3 @@ MIT — 见 [LICENSE](LICENSE)。
   ，Godot Engine 项目
 - **[libvterm 0.3.3](https://www.leonerd.org.uk/code/libvterm/)**，
   作者 Paul "LeoNerd" Evans — MIT，已 vendored 到 `thirdparty/libvterm/`
-
-## 致谢
-
-这个插件之所以能存在，是因为 libvterm 很擅长做终端，ConPTY 很擅长伪装终端，
-而 Godot 暴露了足够多的渲染 API，让一个 `Control` 节点可以足够快地绘制字符单元，
-快到你几乎察觉不到。
