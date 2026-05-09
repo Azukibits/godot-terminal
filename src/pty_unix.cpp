@@ -9,15 +9,6 @@
 
 #include "pty_unix.h"
 
-#if defined(__APPLE__)
-#include <util.h>
-#elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || \
-      defined(__DragonFly__)
-#include <libutil.h>
-#else
-#include <pty.h>
-#endif
-
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -27,6 +18,21 @@
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
+
+#if defined(__APPLE__)
+#include <util.h>
+#elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || \
+      defined(__DragonFly__)
+#include <libutil.h>
+#else
+// glibc's <pty.h> declares forkpty unconditionally, but in practice
+// godot-cpp's strict-C++ build sometimes hides the prototype anyway.
+// Declare it explicitly so the compile doesn't depend on pty.h — the
+// symbol resolves at link time via -lutil.
+extern "C" pid_t forkpty(int *amaster, char *name,
+                         const struct termios *termp,
+                         const struct winsize *winp);
+#endif
 
 #include <chrono>
 #include <thread>
